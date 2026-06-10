@@ -2,7 +2,7 @@
  * Sync Page.
  */
 import { useState } from 'react';
-import { Sync, RefreshCw } from 'lucide-react';
+import { RotateCw, RefreshCw } from 'lucide-react';
 
 export default function SyncPage() {
   return (
@@ -20,7 +20,7 @@ export default function SyncPage() {
 
       <div className="bg-slate-900 border border-slate-800 p-6 rounded-lg">
         <div className="flex items-center gap-3 mb-4">
-          <Sync className="w-6 h-6 text-cyan-400" />
+          <RotateCw className="w-6 h-6 text-cyan-400" />
           <h2 className="text-lg font-semibold text-white">Sync Status</h2>
         </div>
         <p className="text-slate-500">No pending sync requests.</p>

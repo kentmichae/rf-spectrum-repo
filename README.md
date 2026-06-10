@@ -10,7 +10,7 @@ The system provides a structured workflow for capturing RF signal fingerprints a
 - **Signal Record Management:** Comprehensive tracking of observation IDs, timestamps, frequency ranges, bandwidth, modulation types, and classification status.
 - **Geospatial Intelligence:** 
   - Coordinate storage (Lat/Long, GeoJSON, Polygon regions).
-  - Interactive map visualization.
+  - Interactive map visualization via Leaflet.
   - Spatial filtering by location and region.
 - **Offline-First Synchronization:** Secure, incremental synchronization between field nodes and the central database with built-in conflict resolution.
 - **Zero-Trust Security:** 
@@ -22,22 +22,46 @@ The system provides a structured workflow for capturing RF signal fingerprints a
 
 ## 🏗️ System Architecture
 The application follows a modular microservices architecture deployed via Docker Compose:
-- **Frontend:** React + TypeScript + Tailwind + Leaflet.
-- **Backend:** FastAPI + SQLAlchemy + PostGIS.
-- **Database:** PostgreSQL 16 + PostGIS.
-- **Identity:** OIDC / OAuth2.
-- **Gateway:** Reverse Proxy (Nginx/Traefik).
 
-Detailed architectural blueprints can be found in `docs/architecture/`.
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    Client / Browser                          │
+│                      Port 3001                               │
+└──────────────────────┬───────────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    Nginx Proxy                               │
+│                    Port 8080 (host)                          │
+├──────────────────┬───────────────────┬──────────────────────┤
+│ SPA Routing      │ API Proxy         │ Static Assets         │
+│ (/)              │ (/api/) → backend │ (30d cache)           │
+│ (try_files)      │ (rate limit 30r/s)│                      │
+└──────────────┬───────────────────────┴──────────────────────┘
+               │
+       ┌───────▼────────┐         ┌────────────────────────────┐
+       │   Backend API   │←───────→│   PostGIS 16 Database     │
+       │   FastAPI +     │  5432   │   PostgreSQL + PostGIS    │
+       │   uvicorn       │         │   + custom mappings       │
+       └────────────────┘         └────────────────────────────┘
+```
+
+### Services
+| Service      | Container          | Image                          | Port (host) | Purpose                         |
+|--------------|--------------------|--------------------------------|-------------|---------------------------------|
+| Database     | `rf_sor_db`        | postgis/postgis:16-3.4         | 5432        | PostgreSQL 16 + PostGIS         |
+| Backend API  | `rf_sor_backend`   | rf-spectrum-repo-backend       | 8000        | FastAPI + uvicorn               |
+| Frontend     | `rf_sor_frontend`  | node:20-alpine + serve         | 3001        | React SPA (Vite build)          |
+| Reverse Proxy| `rf_sor_nginx`     | nginx:1.25-alpine              | 8082        | SPA routing + API reverse proxy |
 
 ## 🛠️ Tech Stack
 | Layer | Technology |
 | :--- | :--- |
-| **Frontend** | React, TypeScript, Vite, Tailwind CSS, Leaflet |
-| **Backend** | Python, FastAPI, SQLAlchemy |
-| **Database** | PostgreSQL, PostGIS |
-| **Security** | OIDC, OAuth2, JWT, AES-256 |
-| **DevOps** | Docker, Docker Compose, Git |
+| **Frontend** | React 18, TypeScript, Vite 5, Tailwind CSS 3, Leaflet, react-leaflet, lucide-react, react-router-dom |
+| **Backend** | Python 3.11, FastAPI 0.111, SQLAlchemy 2.0, psycopg2, pydantic, shapely, geojson, numpy |
+| **Database** | PostgreSQL 16 + PostGIS 3.4 + GeoAlchemy2 |
+| **Security** | OIDC/OAuth2, JWT, bcrypt, CORS, rate limiting |
+| **DevOps** | Docker Compose, multi-stage builds, Nginx, Python 11-slim, Node 20-alpine |
 
 ## 🚀 Quick Start
 
@@ -51,36 +75,89 @@ Detailed architectural blueprints can be found in `docs/architecture/`.
    git clone https://github.com/kentmichae/rf-spectrum-repo.git
    cd rf-spectrum-repo
    ```
+
 2. Configure environment variables:
    ```bash
    cp .env.example .env
    # Edit .env with your specific credentials
    ```
+
 3. Spin up the stack:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
+
 4. Access the Dashboard:
-   - Web UI: `http://localhost:3000`
-   - API Docs (direct): `http://localhost:8000/docs`
-   - API Docs (via proxy): `http://localhost:8080/docs`
-   - Proxy port: `8080` (reverse proxy)
+   - **Web UI**: `http://localhost:3001`
+   - **API Docs (direct)**: `http://localhost:8000/docs`
+   - **API Docs (via proxy)**: `http://localhost:8082/docs`
+   - **Proxy endpoint**: `http://localhost:8082` (reverse proxy)
+
+### Port Configuration
+| Service | Container Port | Host Port | Notes |
+|---------|---------------|-----------|-------|
+| Frontend | 3000 | **3001** | Changed to avoid conflict with WorldwideView |
+| Backend | 8000 | 8000 | FastAPI / uvicorn |
+| Reverse Proxy | 80 | **8082** | Changed to avoid conflict with cew-dashboard |
+| Database | 5432 | none | Internal networking only |
+
+### Docker Compose Configuration
+The project uses an arm64-based PostGIS image (linux/amd64 + QEMU emulation) since the host is ARM64 architecture. All volumes and networks are managed through docker-compose v2.
 
 ## 📂 Project Structure
 ```text
 rf-spectrum-repo/
 ├── backend/              # FastAPI Backend
 │   ├── app/              # Application logic
+│   │   ├── main.py       # FastAPI entry point
+│   │   ├── database.py   # SQLAlchemy session + Base
+│   │   ├── models.py     # SQLAlchemy models (Region, User, Observation, etc.)
+│   │   ├── config.py     # Environment settings
+│   │   └── routes/       # API route modules
+│   │       ├── health.py
+│   │       ├── auth.py
+│   │       ├── users.py
+│   │       ├── observations.py
+│   │       ├── spatial.py
+│   │       ├── sync.py
+│   │       └── ingestion.py
 │   ├── migrations/       # PostGIS initialization scripts
-│   └── tests/            # Integration and Unit tests
+│   ├── Dockerfile        # Multi-stage build (python:3.11-slim)
+│   └── requirements.txt  # Python dependencies
 ├── frontend/             # React Frontend
 │   ├── src/              # Source code
-│   └── public/           # Static assets
+│   │   ├── components/   # Layout, Navigation
+│   │   ├── pages/        # Dashboard, Observations, Map, Users, etc.
+│   │   └── main.tsx      # Entry point
+│   ├── Dockerfile        # Multi-stage build (node:20-alpine)
+│   └── nginx/            # Static file configuration
+├── nginx/                # Reverse proxy configuration
+│   └── conf.d/           # Default server config
 ├── docs/                 # Architecture and Security docs
-│   └── architecture/     # Blueprints and Schemas
+│   └── architecture/     # Blueprints (HTML diagrams)
 ├── data/                 # Sample datasets for testing
 ├── docker-compose.yml    # Orchestration config
-└── README.md             # Project Guide
+├── .env.example          # Template environment variables
+└── README.md             # This file
+```
+
+## 🧪 Development Commands
+```bash
+# Start the full stack
+docker compose up -d
+
+# View logs
+docker compose logs -f backend
+docker compose logs -f nginx
+
+# Rebuild and restart
+docker compose up -d --build
+
+# Stop all services
+docker compose down --remove-orphans
+
+# Check health status
+docker compose ps
 ```
 
 ## 🛡️ Security Note
@@ -91,7 +168,7 @@ This project is designed for the lawful storage and management of observation me
 | :--- | :--- |
 | **Database Schema** | `backend/migrations/init.sql` - full init script |
 | **Backend API** | `backend/app/` - SQLAlchemy models, Pydantic schemas, 6 route modules (health, auth, observations, users, spatial, sync), ingestion router, CORS, multi-stage Dockerfile |
-| **Frontend** | `frontend/src/` - Layout, Dashboard, Observations, Map (Leaflet), Users, Sync, Import, Settings pages, React Router 7+ |
-| **Docker** | `docker-compose.yml` - PostGIS 16, backend with CORS, frontend served via `serve` |
-| **Nginx** | `nginx/conf.d/default.conf` - SPA routing, API proxy, rate limiting, security headers |
+| **Frontend** | `frontend/src/` - Layout, Dashboard, Observations, Map (Leaflet), Users, Sync, Import, Settings pages |
+| **Docker** | `docker-compose.yml` - PostgreSQL 16, backend with CORS, frontend via serve |
+| **Nginx** | `nginx/nginx.conf` - SPA routing, API proxy, rate limiting, security headers |
 | **Test Data** | `data/sample_observations.json` |

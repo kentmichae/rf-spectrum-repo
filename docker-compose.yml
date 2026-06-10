@@ -1,10 +1,10 @@
-version: '3.8'
-
 services:
+
   db:
     image: postgis/postgis:16-3.4
-    platform: linux/arm64/v8
+    platform: linux/amd64
     container_name: rf_sor_db
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -24,40 +24,62 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: rf_sor_api
+    container_name: rf_sor_backend
+    restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
       - API_SECRET_KEY=${API_SECRET_KEY}
-      - API_DEBUG=${API_DEBUG}
-      - CORS_ORIGINS=${CORS_ORIGINS}:-http://localhost:3000}
+      - CORS_ORIGINS=http://localhost:3001
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
     networks:
       - backend_net
       - frontend_net
-    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: rf_sor_web
+    container_name: rf_sor_frontend
+    restart: unless-stopped
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://backend:8000
+      - "3001:3000"
+    depends_on:
+      - backend
     networks:
       - frontend_net
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: rf_sor_nginx
     restart: unless-stopped
+    ports:
+      - "8082:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - frontend_net
+
+volumes:
+  postgres_data:
 
 networks:
   backend_net:
     driver: bridge
   frontend_net:
     driver: bridge
-
-volumes:
-  postgres_data:

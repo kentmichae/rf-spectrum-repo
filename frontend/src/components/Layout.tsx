@@ -6,7 +6,7 @@ import {
   Map,
   Settings,
   Upload,
-  Sync,
+  RefreshCw,
   Activity,
   LogOut,
 } from 'lucide-react';
@@ -17,7 +17,7 @@ export default function Layout() {
     { label: 'Observations', path: '/observations', icon: Radio },
     { label: 'Map View', path: '/map', icon: Map },
     { label: 'Users', path: '/users', icon: Users },
-    { label: 'Sync', path: '/sync', icon: Sync },
+    { label: 'Sync', path: '/sync', icon: RotateCw },
     { label: 'Import', path: '/import', icon: Upload },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];

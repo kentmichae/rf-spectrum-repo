@@ -12,8 +12,8 @@ from .config import settings
 
 engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = DeclarativeBase
-
+class Base(DeclarativeBase):
+    pass
 
 def get_db():
     """Yield a DB session, ensuring it is closed on exit."""
