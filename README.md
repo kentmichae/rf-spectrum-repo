@@ -62,7 +62,9 @@ Detailed architectural blueprints can be found in `docs/architecture/`.
    ```
 4. Access the Dashboard:
    - Web UI: `http://localhost:3000`
-   - API Docs: `http://localhost:8000/docs`
+   - API Docs (direct): `http://localhost:8000/docs`
+   - API Docs (via proxy): `http://localhost:8080/docs`
+   - Proxy port: `8080` (reverse proxy)
 
 ## 📂 Project Structure
 ```text
@@ -83,3 +85,13 @@ rf-spectrum-repo/
 
 ## 🛡️ Security Note
 This project is designed for the lawful storage and management of observation metadata. It does not implement offensive, targeting, or surveillance capabilities.
+
+## 📋 Current Status
+| Component | Status |
+| :--- | :--- |
+| **Database Schema** | `backend/migrations/init.sql` - full init script |
+| **Backend API** | `backend/app/` - SQLAlchemy models, Pydantic schemas, 6 route modules (health, auth, observations, users, spatial, sync), ingestion router, CORS, multi-stage Dockerfile |
+| **Frontend** | `frontend/src/` - Layout, Dashboard, Observations, Map (Leaflet), Users, Sync, Import, Settings pages, React Router 7+ |
+| **Docker** | `docker-compose.yml` - PostGIS 16, backend with CORS, frontend served via `serve` |
+| **Nginx** | `nginx/conf.d/default.conf` - SPA routing, API proxy, rate limiting, security headers |
+| **Test Data** | `data/sample_observations.json` |

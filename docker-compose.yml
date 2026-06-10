@@ -3,6 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgis/postgis:16-3.4
+    platform: linux/arm64/v8
     container_name: rf_sor_db
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -20,12 +21,15 @@ services:
       - backend_net
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: rf_sor_api
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - API_SECRET_KEY=${API_SECRET_KEY}
       - API_DEBUG=${API_DEBUG}
+      - CORS_ORIGINS=${CORS_ORIGINS}:-http://localhost:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -34,30 +38,20 @@ services:
     networks:
       - backend_net
       - frontend_net
+    restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: rf_sor_web
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://backend:8000
     networks:
       - frontend_net
-
-  reverse_proxy:
-    image: nginx:alpine
-    container_name: rf_sor_proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - frontend_net
+    restart: unless-stopped
 
 networks:
   backend_net:

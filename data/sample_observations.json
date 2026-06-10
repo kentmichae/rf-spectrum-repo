@@ -1,0 +1,47 @@
+# Sample RF Spectrum Observations
+# This file contains sample data for testing the API endpoints.
+
+[
+    {
+        "timestamp": "2026-06-09T10:00:00Z",
+        "frequency_start": 144.0,
+        "frequency_end": 148.0,
+        "bandwidth": 4.0,
+        "modulation_type": "FM",
+        "signal_strength": -65.2,
+        "classification_status": "VERIFIED",
+        "notes": "Regular FM broadcast band signal",
+        "technician_id": null,
+        "equipment_id": null,
+        "location_wkt": "-122.4194 37.7749",
+        "is_current": true
+    },
+    {
+        "timestamp": "2026-06-09T10:15:00Z",
+        "frequency_start": 90.0,
+        "frequency_end": 108.0,
+        "bandwidth": 18.0,
+        "modulation_type": "FM",
+        "signal_strength": -42.1,
+        "classification_status": "UNCERTAIN",
+        "notes": "Strong signal detected in the FM broadcast band",
+        "technician_id": null,
+        "equipment_id": null,
+        "location_wkt": "-122.4094 37.7849",
+        "is_current": true
+    },
+    {
+        "timestamp": "2026-06-09T10:30:00Z",
+        "frequency_start": 433.0,
+        "frequency_end": 434.0,
+        "bandwidth": 1.0,
+        "modulation_type": "FSK",
+        "signal_strength": -55.0,
+        "classification_status": "UNCERTAIN",
+        "notes": "ISF band signal with frequency shift keying",
+        "technician_id": null,
+        "equipment_id": null,
+        "location_wkt": "-122.3994 47.7949",
+        "is_current": true
+    }
+]
