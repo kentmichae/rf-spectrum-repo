@@ -16,6 +16,37 @@ from ..schemas import (
 )
 from ..models import Observation
 
+
+def _obs_to_dict(obs: Observation) -> dict:
+    """Convert an Observation model to a dict suitable for ObservationRead."""
+    loc_wkt = "POINT(0 0)"
+    if obs.location is not None:
+        try:
+            geom = shape.to_shape(obs.location)
+            loc_wkt = shapely.wkt.dumps(geom)
+        except Exception:
+            loc_wkt = str(obs.location)
+    
+    return {
+        "id": obs.id,
+        "observation_uuid": obs.observation_uuid,
+        "version": obs.version,
+        "timestamp": obs.timestamp,
+        "frequency_start": obs.frequency_start,
+        "frequency_end": obs.frequency_end,
+        "bandwidth": obs.bandwidth,
+        "modulation_type": obs.modulation_type,
+        "signal_strength": obs.signal_strength,
+        "classification_status": obs.classification_status,
+        "notes": obs.notes,
+        "equipment_id": obs.equipment_id,
+        "technician_id": obs.technician_id,
+        "location_wkt": loc_wkt,
+        "is_current": obs.is_current,
+        "created_at": obs.created_at,
+    }
+
+
 router = APIRouter()
 
 
@@ -63,7 +94,7 @@ def list_observations(
     total = query.count()
     results = query.order_by(Observation.timestamp.desc())
     results = results.offset((page_num - 1) * page_size).limit(page_size).all()
-    return results
+    return [_obs_to_dict(o) for o in results]  # type: ignore[return-value]
 
 
 @router.post("", response_model=ObservationRead, tags=["observations"])
@@ -96,7 +127,7 @@ def create_observation(
     db.add(obs)
     db.commit()
     db.refresh(obs)
-    return obs
+    return _obs_to_dict(obs)  # type: ignore[return-value]
 
 
 @router.get("/{obs_id}", response_model=ObservationRead, tags=["observations"])
@@ -108,7 +139,7 @@ def get_observation(
     obs = db.query(Observation).filter(Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(status_code=404, detail="Observation not found")
-    return obs
+    return _obs_to_dict(obs)  # type: ignore[return-value]
 
 
 @router.put("/{obs_id}", response_model=ObservationRead, tags=["observations"])
