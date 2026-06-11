@@ -188,7 +188,7 @@ def update_observation(
     db.add(new_obs)
     db.commit()
     db.refresh(new_obs)
-    return new_obs
+    return _obs_to_dict(new_obs)  # type: ignore[return-value]
 
 
 @router.delete("/{obs_id}", tags=["observations"])
