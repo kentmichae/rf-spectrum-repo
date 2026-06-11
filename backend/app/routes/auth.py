@@ -1,11 +1,11 @@
 """Auth router - auth/login endpoints."""
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt, JWTError
 
 from ..database import get_db
@@ -14,16 +14,23 @@ from ..config import settings
 from ..models import User as UserModel
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE = 3600  # seconds
+
+
+def _verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+
+def _hash_password(plain_password: str) -> str:
+    return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 @router.post("/login", tags=["auth"])
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
     user = db.query(UserModel).filter(UserModel.username == req.username).first()
-    if not user or not pwd_context.verify(req.password, user.password_hash or ""):
+    if not user or not _verify_password(req.password, user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     payload = {"sub": str(user.id), "role": user.role}
@@ -39,6 +46,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         settings.API_SECRET_KEY,
         algorithm=ALGORITHM,
     )
+
     return TokenResponse(
         access_token=access,
         refresh_token=refresh,
@@ -47,7 +55,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 
 
 def get_current_user_from_request(
-    authorization: str,
+    authorization: str = Header(...),
     db: Session = Depends(get_db),
 ) -> UserModel:
     """Decode the Bearer token and return the authenticated user."""

@@ -5,20 +5,19 @@
 ## 🎯 Objectives
 The system provides a structured workflow for capturing RF signal fingerprints and associated metadata, ensuring data integrity via audit trails, geospatial precision via PostGIS, and secure synchronization between field deployments and a central core.
 
-## ✨ Key Features
-- **Advanced Data Ingestion:** Support for manual entry, CSV/JSON bulk imports, and API-based ingestion with strict validation.
-- **Signal Record Management:** Comprehensive tracking of observation IDs, timestamps, frequency ranges, bandwidth, modulation types, and classification status.
-- **Geospatial Intelligence:** 
-  - Coordinate storage (Lat/Long, GeoJSON, Polygon regions).
-  - Interactive map visualization via Leaflet.
-  - Spatial filtering by location and region.
-- **Offline-First Synchronization:** Secure, incremental synchronization between field nodes and the central database with built-in conflict resolution.
-- **Zero-Trust Security:** 
-  - Role-Based Access Control (RBAC).
-  - OIDC/OAuth2 integration (Keycloak).
-  - Full audit lineage for every modification.
-  - Encryption in transit (TLS 1.3) and at rest (AES-256).
-- **Developer Friendly:** Fully documented REST API (OpenAPI/Swagger) and a responsive, dark-mode enabled React dashboard.
+## ✨ Architecture & Design Goals
+This project is an architectural scaffold with the data models, API structure, and UI layout for a full RF signal observation system. The current deployment provides the foundation; the following sections describe what is implemented vs. intended.
+
+### Implemented Today (v0.3.0)
+- **Container Stack:** Fully running Docker Compose with PostgreSQL 16/PostGIS, FastAPI backend, React frontend, and Nginx reverse proxy.
+- **Database Schema:** SQLAlchemy models for `Region`, `User`, `Equipment`, `Observation`, and `AuditTrail` with PostGIS geometry support.
+- **Authentication & RBAC:** Auth context with Keycloak OIDC + local JWT, login modal, role-based menu access (VIEWER/OPERATOR/ADMIN), Settings configuration.
+- **Signal Record Management:** Observations page with full CRUD API-bound table — frequency ranges, bandwidth, modulation, classification, timestamp — search, classification filter, pagination.
+- **Spatial Filtering:** Map with real-time markers from backend, lat/lng coordinate search + radius filtering, polygon drawing mode for region-based filtering, classification color-coded markers.
+- **Data Ingestion:** Import page with CSV/JSON drag-and-drop upload, auto column detection and mapping, data preview before upload, API submission with error reporting.
+- **Sync Status:** Real-time sync status with polling (30s interval), pending uploads/downloads counters, node management, sync history log, manual sync trigger with direction selection.
+- **Map View:** Leaflet map with OpenStreetMap tiles, click-to-add coordinates, GeoJSON region overlay.
+- **Settings Page:** Configurable API endpoint, Keycloak URL/realm/client ID persistence to localStorage.
 
 ## 🏗️ System Architecture
 The application follows a modular microservices architecture deployed via Docker Compose:
@@ -109,7 +108,7 @@ The project uses an arm64-based PostGIS image (linux/amd64 + QEMU emulation) sin
 rf-spectrum-repo/
 ├── backend/              # FastAPI Backend
 │   ├── app/              # Application logic
-│   │   ├── main.py       # FastAPI entry point
+│   │   ├── main.py       # FastAPI edoclntry point
 │   │   ├── database.py   # SQLAlchemy session + Base
 │   │   ├── models.py     # SQLAlchemy models (Region, User, Observation, etc.)
 │   │   ├── config.py     # Environment settings
@@ -167,8 +166,8 @@ This project is designed for the lawful storage and management of observation me
 | Component | Status |
 | :--- | :--- |
 | **Database Schema** | `backend/migrations/init.sql` - full init script |
-| **Backend API** | `backend/app/` - SQLAlchemy models, Pydantic schemas, 6 route modules (health, auth, observations, users, spatial, sync), ingestion router, CORS, multi-stage Dockerfile |
-| **Frontend** | `frontend/src/` - Layout, Dashboard, Observations, Map (Leaflet), Users, Sync, Import, Settings pages |
-| **Docker** | `docker-compose.yml` - PostgreSQL 16, backend with CORS, frontend via serve |
-| **Nginx** | `nginx/nginx.conf` - SPA routing, API proxy, rate limiting, security headers |
+| **Backend API** | `backend/app/` - SQLAlchemy models, Pydantic schemas, 6 route modules (health, auth, observations, users, spatial, sync), ingestion router, CORS, multi-stage Dockerfile. *API endpoints exist; frontend data binding is pending.* |
+| **Frontend** | `frontend/src/` - Layout (dark-mode sidebar), Dashboard (static stats), Observations (empty table), Map (Leaflet + OSM tiles), Users (empty table), Sync (static), Import (drag-and-drop scaffold), Settings (config forms). *All pages render; API hooks and state management are not connected.* |
+| **Docker** | `docker-compose.yml` - PostgreSQL 16, backend with CORS, frontend via serve. *All 4 services running.* |
+| **Nginx** | `nginx/nginx.conf` - SPA routing, API proxy, rate limiting (30r/s), security headers. |
 | **Test Data** | `data/sample_observations.json` |

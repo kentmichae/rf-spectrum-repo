@@ -93,28 +93,10 @@ def create_observation(
         location=loc,
         is_current=True,
     )
-
-    # Create a copy as the current record
-    current = Observation(
-        observation_uuid=obs.observation_uuid if hasattr(obs, "observation_uuid") else uuid.uuid4(),
-        version=1,
-        timestamp=payload.timestamp,
-        frequency_start=payload.frequency_start,
-        frequency_end=payload.frequency_end,
-        bandwidth=payload.bandwidth,
-        modulation_type=payload.modulation_type,
-        signal_strength=payload.signal_strength,
-        classification_status=payload.classification_status,
-        notes=payload.notes,
-        equipment_id=payload.equipment_id,
-        technician_id=payload.technician_id,
-        location=loc,
-        is_current=True,
-    )
-    db.add(current)
+    db.add(obs)
     db.commit()
-    db.refresh(current)
-    return current
+    db.refresh(obs)
+    return obs
 
 
 @router.get("/{obs_id}", response_model=ObservationRead, tags=["observations"])

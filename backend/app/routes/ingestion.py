@@ -1,16 +1,26 @@
 """Ingestion router - bulk import from JSON/CSV."""
 import uuid
+from datetime import datetime
 from io import StringIO
-from typing import List
+from typing import List, Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from geoalchemy2 import WKTElement
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas import IngestionJob
+from ..schemas import ObservationCreate
 from ..models import Observation
 
 router = APIRouter()
+
+
+# Standard column headers that ingestion should map to the Observation model.
+EXPECTED_FIELDS = [
+    "observation_uuid", "timestamp", "frequency_start", "frequency_end",
+    "bandwidth", "modulation_type", "signal_strength", "classification_status",
+    "notes", "equipment_id", "technician_id", "location_wkt", "is_current",
+]
 
 
 @router.post("/upload", tags=["ingestion"])
@@ -33,13 +43,99 @@ def upload_observations(
             detail="Unsupported file type: use .json or .csv"
         )
 
+    processed = 0
+    errors: List[str] = []
+    job_id = uuid.uuid4()
+
+    for idx, raw in enumerate(records):
+        try:
+            payload = _build_observations(raw)
+            for obs in payload:
+                db.add(obs)
+                db.flush()  # get the id before next record
+            processed += len(payload)
+        except Exception as exc:
+            errors.append(f"Row {idx}: {exc}")
+
+    db.commit()
+
     return {
-        "job_id": uuid.uuid4(),
+        "job_id": job_id,
         "status": "completed",
         "total_records": len(records),
-        "processed": len(records),
-        "errors": [],
+        "processed": processed,
+        "errors": errors,
     }
+
+
+def _build_observations(raw: dict) -> List[Observation]:
+    """Turn a parsed row (dict) into one or more Observation ORM objects."""
+    if isinstance(raw, list):
+        return [_build_one(raw[i]) for i in range(len(raw))]
+    return [_build_one(raw)]
+
+
+def _build_one(raw: dict) -> Observation:
+    """Validate and build a single Observation from a raw dict."""
+
+    def _float(field: str):
+        val = raw.get(field)
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    ts = raw.get("timestamp")
+    if ts is not None:
+        ts = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+
+    # Must have at least location_wkt and frequencies
+    loc_wkt = raw.get("location_wkt")
+    if not loc_wkt:
+        raise ValueError(f"Missing required field 'location_wkt'")
+
+    loc = WKTElement(f"POINT({loc_wkt})", srid=4326)
+
+    freq_start_str = raw.get("frequency_start")
+    freq_end_str = raw.get("frequency_end")
+    if freq_start_str is not None and freq_end_str is not None:
+        frequency_start = _float("frequency_start")
+        frequency_end = _float("frequency_end")
+    else:
+        raise ValueError(f"Missing required field 'frequency_start' or 'frequency_end'")
+
+    mod_str = raw.get("modulation_type")
+    classification = raw.get("classification_status", "UNCERTAIN")
+
+    return Observation(
+        observation_uuid=uuid.uuid4(),
+        version=1,
+        timestamp=ts or datetime.utcnow(),
+        frequency_start=frequency_start or 0.0,
+        frequency_end=frequency_end or 0.0,
+        bandwidth=_float("bandwidth"),
+        modulation_type=str(mod_str) if mod_str else None,
+        signal_strength=_float("signal_strength"),
+        classification_status=classification,
+        notes=str(raw.get("notes", "")) if raw.get("notes") is not None else None,
+        equipment_id=_parse_id(raw.get("equipment_id")),
+        technician_id=_parse_id(raw.get("technician_id")),
+        location=loc,
+        is_current=raw.get("is_current", True),
+    )
+
+
+def _parse_id(val: Any):
+    if val is None:
+        return None
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except (ValueError, TypeError):
+        return None
 
 
 def _parse_json(content: bytes) -> List[dict]:

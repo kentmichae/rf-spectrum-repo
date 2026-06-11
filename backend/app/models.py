@@ -22,7 +22,7 @@ class Region(Base):
     boundary: Mapped[Geometry] = mapped_column(Geometry("POLYGON", srid=4326), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    observations = relationship("Observation", back_populates="region")
+    users = relationship("User", back_populates="region")
 
     def __repr__(self):
         return f"<Region(id={self.id}, name='{self.name}')>"

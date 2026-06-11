@@ -1,9 +1,10 @@
 FROM python:3.11-slim AS base
 
-# Install system dependencies for psycopg2 and other C-extensions
+# Install system dependencies for psycopg2 and healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,6 +20,10 @@ COPY . .
 
 # Stage 3: Final image
 FROM python:3.11-slim AS production
+
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser

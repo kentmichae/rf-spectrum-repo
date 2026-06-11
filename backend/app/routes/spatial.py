@@ -13,7 +13,7 @@ from ..models import Region, Observation
 router = APIRouter()
 
 
-@router.get("/spatial/observations/by_region", tags=["spatial"])
+@router.get("/observations/by_region", tags=["spatial"])
 def get_observations_by_region(
     region_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -43,7 +43,7 @@ def get_observations_by_region(
     ]
 
 
-@router.get("/spatial/observations/by_distance", tags=["spatial"])
+@router.get("/observations/by_distance", tags=["spatial"])
 def get_observations_by_distance(
     lat: float = Query(..., gt=-90, lt=90),
     lng: float = Query(..., gt=-180, lt=180),
@@ -73,13 +73,13 @@ def get_observations_by_distance(
     ]
 
 
-@router.get("/spatial/regions", tags=["spatial"])
+@router.get("/regions", tags=["spatial"])
 def list_regions(db: Session = Depends(get_db)) -> List[RegionRead]:
     """List all defined regions."""
     return db.query(Region).all()  # type: ignore[return-value]
 
 
-@router.post("/spatial/regions", tags=["spatial"])
+@router.post("/regions", tags=["spatial"])
 def create_region(
     payload: RegionCreate,
     db: Session = Depends(get_db),
@@ -96,7 +96,7 @@ def create_region(
     return region  # type: ignore[return-value]
 
 
-@router.get("/spatial/regions/{region_id}", tags=["spatial"])
+@router.get("/regions/{region_id}", tags=["spatial"])
 def get_region(
     region_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -108,7 +108,7 @@ def get_region(
     return region  # type: ignore[return-value]
 
 
-@router.get("/spatial/observations/by_bbox", tags=["spatial"])
+@router.get("/observations/by_bbox", tags=["spatial"])
 def get_observations_by_bbox(
     lng_min: float = Query(..., gt=-180, lt=180),
     lat_min: float = Query(..., gt=-90, lt=90),

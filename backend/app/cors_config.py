@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # CORS - adjust origins for production
 origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://localhost:8080",
+    "http://localhost:8082",
 ]
 
 def setup_cors(app):
