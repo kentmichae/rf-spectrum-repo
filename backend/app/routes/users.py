@@ -2,19 +2,21 @@
 import uuid
 from typing import List, Optional
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
-from passlib.context import CryptContext
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..config import settings
 from ..database import get_db
 from ..schemas import (
-    UserCreate, UserRead, UserUpdate
+    UserCreate, UserRead, UserUpdate,
 )
 from ..models import User as UserModel
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
 
 router = APIRouter()
 
@@ -30,6 +32,42 @@ def list_users(
     return users  # type: ignore[return-value]
 
 
+@router.get("/{user_id}", response_model=UserRead, tags=["users"])
+def get_user(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """Get a single user by ID."""
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.patch("/{user_id}", response_model=UserRead, tags=["users"])
+def patch_user(
+    user_id: uuid.UUID,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+):
+    """Partially update a user."""
+    existing = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    update_fields = payload.model_dump(exclude_unset=True)
+    if "password" in update_fields:
+        update_fields["password_hash"] = _hash_password(update_fields.pop("password"))
+
+    for key, value in update_fields.items():
+        setattr(existing, key, value)
+
+    db.add(existing)
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
 @router.post("", tags=["users"])
 def create_user(
     payload: UserCreate,
@@ -39,7 +77,7 @@ def create_user(
     user = UserModel(
         username=payload.username,
         email=payload.email,
-        password_hash=pwd_context.hash(payload.password),
+        password_hash=_hash_password(payload.password),
         role=payload.role,
         region_id=payload.region_id,
     )
@@ -62,7 +100,7 @@ def update_user(
 
     update_fields = payload.model_dump(exclude_unset=True)
     if "password" in update_fields:
-        update_fields["password_hash"] = pwd_context.hash(update_fields.pop("password"))
+        update_fields["password_hash"] = _hash_password(update_fields.pop("password"))
 
     for key, value in update_fields.items():
         setattr(existing, key, value)

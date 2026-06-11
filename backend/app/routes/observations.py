@@ -73,7 +73,7 @@ def create_observation(
 ):
     """Create a new observation record."""
     loc = WKTElement(
-        f"POINT({payload.location_wkt})",
+        payload.location_wkt,
         srid=4326,
     )
 
@@ -147,7 +147,7 @@ def update_observation(
 
     if "location_wkt" in update_data:
         new_obs.location = WKTElement(
-            f"POINT({update_data['location_wkt']})",
+            update_data['location_wkt'],
             srid=4326,
         )
 
