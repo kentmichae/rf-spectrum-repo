@@ -121,6 +121,24 @@ class ObservationRead(BaseSchema):
     is_current: bool
     created_at: datetime
 
+    model_config = {"from_attributes": True}
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Custom validator to handle geoalchemy2 geometry objects."""
+        if hasattr(obj, '__dict__') and 'location' in obj.__dict__:
+            loc = obj.__dict__.get('location')
+            if loc is not None:
+                # Convert WKBElement to WKT
+                from geoalchemy2.shape import to_shape
+                import shapely.wkt
+                try:
+                    shape = to_shape(loc)
+                    obj.__dict__['location_wkt'] = shapely.wkt.dumps(shape)
+                except Exception:
+                    obj.__dict__['location_wkt'] = str(loc) if loc else "POINT(0 0)"
+        return super().model_validate(obj, **kwargs)
+
 
 class ObservationBulkCreate(BaseModel):
     records: list[ObservationCreate]
