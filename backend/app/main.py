@@ -65,7 +65,8 @@ async def db_check(db: Session = Depends(get_db)):
 
 # ============ TODO: Wire routers ===
 
-from .routes import health, observations, users, auth, ingestion, sync, spatial  # noqa: E402
+from .routes import equipment, health, observations, users, auth, ingestion, sync, spatial  # noqa: E402
+app.include_router(equipment.router, prefix="/api/equipment", tags=["equipment"])
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(observations.router, prefix="/api/observations", tags=["observations"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
