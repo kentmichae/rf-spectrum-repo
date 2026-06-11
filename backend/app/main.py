@@ -2,9 +2,11 @@
 
 import logging
 from contextlib import asynccontextmanager
+import traceback
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text, inspect as sqla_inspect
 from sqlalchemy.orm import Session
 
@@ -46,8 +48,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import traceback
+    logger.error("Unhandled exception: %s", exc)
+    logger.error("Traceback: %s", traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "error": str(exc)},
+    )
 
-# ================== Health ===
+
+# ============ Health ==
 
 @app.get("/health")
 async def health_check():
@@ -63,7 +76,7 @@ async def db_check(db: Session = Depends(get_db)):
         return {"status": "disconnected", "error": str(e)}
 
 
-# ============ TODO: Wire routers ===
+# ====== TODO: Wire routers ===
 
 from .routes import equipment, health, observations, users, auth, ingestion, sync, spatial  # noqa: E402
 app.include_router(equipment.router, prefix="/api/equipment", tags=["equipment"])
