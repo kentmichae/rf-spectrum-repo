@@ -8,6 +8,7 @@
  * - Click-to-add coordinates
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as leaflet from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
