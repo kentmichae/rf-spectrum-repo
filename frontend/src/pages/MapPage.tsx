@@ -6,6 +6,10 @@
  * - Spatial filtering by lat/lng + radius or polygon
  * - Polygon drawing mode for region-based filtering
  * - Click-to-add coordinates
+ * - CLICKABLE MARKERS: click any marker to fly-map to its observation
+ * - CLICKABLE LIST: click any list item to fly-map to its observation
+ * - ACTIVE HIGHLIGHT: glowing border on the active (flying-to) observation
+ * - IMPROVED POPUP: "View on Map" button, frequency range bar, classification color bar
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as leaflet from 'leaflet';
@@ -14,7 +18,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiObservations, apiRegions } from '../lib/api-client';
 import type { Observation, Region, ObservationQueryParams } from '../types/api';
-import { Search, Locate, Filter, MapPin, X, Square, Pencil } from 'lucide-react';
+import { Search, Locate, Filter, MapPin, X, Square, Pencil, Navigation2 } from 'lucide-react';
 
 // Fix default marker icons
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -36,6 +40,16 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
   CLASSIFIED: '#ef4444',
   UNCERTAIN: '#94a3b8',
 };
+
+// Frequency color gradient (red = high freq, blue = low freq)
+function freqColor(start: number, end: number): string {
+  const mid = (start + end) / 2;
+  const t = Math.max(0, Math.min(1, (mid - 50) / 950));
+  const r = Math.round(6 + t * 180);
+  const g = Math.round(182 - t * 120);
+  const b = Math.round(229 - t * 140);
+  return `rgb(${r},${g},${b})`;
+}
 
 interface MapViewProps {
   // Allow parent to pass observations if needed, but we'll fetch them ourselves
@@ -61,6 +75,10 @@ export default function MapPage({}: MapViewProps) {
   const [queryParams, setQueryParams] = useState<ObservationQueryParams>({});
   const [polygonGeoJSON, setPolygonGeoJSON] = useState<string | null>(null);
 
+  // ACTIVE OBSERVATION (fly-to highlight)
+  const [activeObservationId, setActiveObservationId] = useState<string | null>(null);
+  const clearActiveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Map ref for center
   const mapRef = useRef<L.Map | null>(null);
   
@@ -72,9 +90,9 @@ export default function MapPage({}: MapViewProps) {
   // WKT parsing utility - extracts [lat, lng] from POINT WKT strings
   const parseWKT = (wkt: string): [number, number] | null => {
     if (!wkt) return null;
-    const pointMatch = wkt.match(/POINT\\s*\\([^\\s]+\\s+([\\)]+)\\)/);
+    const pointMatch = wkt.match(/POINT\s*\(([^\s]+)\s+([^\)]+)\)/);
     if (pointMatch) {
-      const parts = pointMatch[1].trim().split(/\\s+/);
+      const parts = pointMatch[1].trim().split(/\s+/);
       if (parts.length >= 2) {
         const lng = parseFloat(parts[0]);
         const lat = parseFloat(parts[1]);
@@ -84,7 +102,7 @@ export default function MapPage({}: MapViewProps) {
       }
     }
     // Fallback: find any two adjacent numbers
-    const nums = wkt.match(/-?[0-9]+\\.?[0-9]*/g);
+    const nums = wkt.match(/-?[0-9]+\.?[0-9]*/g);
     if (nums && nums.length >= 2) {
       const a = parseFloat(nums[0]);
       const b = parseFloat(nums[1]);
@@ -197,13 +215,23 @@ export default function MapPage({}: MapViewProps) {
     }
   };
 
+  // Fly-to observation: clear previous active, set new active, fly map
   const flyToObservation = (obs: Observation) => {
+    if (clearActiveTimer.current) clearTimeout(clearActiveTimer.current);
+    
+    setActiveObservationId(obs.id);
+    setLocateSearch(obs.id);
+    setFilterMode('none');
+    
     const coords = parseWKT(obs.location_wkt);
     if (coords && mapRef.current) {
       mapRef.current.flyTo(coords, 15);
-      setLocateSearch(obs.id);
-      setFilterMode('none');
     }
+    
+    // Auto-clear highlight after 8 seconds
+    clearActiveTimer.current = setTimeout(() => {
+      setActiveObservationId(null);
+    }, 8000);
   };
 
   // Add clicked point to polygon
@@ -224,6 +252,12 @@ export default function MapPage({}: MapViewProps) {
     );
     setDrawnPaths(prev => [...prev, polygon]);
   };
+
+  // Clear active observation when map is dragged/zoomed
+  const handleMapDragEnd = useCallback(() => {
+    if (clearActiveTimer.current) clearTimeout(clearActiveTimer.current);
+    setActiveObservationId(null);
+  }, []);
 
   // Render polygon overlay from GeoJSON
   const renderPolygonOverlay = () => {
@@ -355,11 +389,9 @@ export default function MapPage({}: MapViewProps) {
                   <button
                     onClick={() => {
                       if (!coordsInput.trim()) return;
-                      // Parse coordinates to GeoJSON
                       const coords = coordsInput.trim().split('\n').map(s => {
                         const parts = s.trim().split(',').map(Number);
                         if (parts.length === 2) {
-                          // WKT: lng lat, swap to lat lng for GeoJSON
                           return [parts[1], parts[0]];
                         }
                         return null;
@@ -368,13 +400,10 @@ export default function MapPage({}: MapViewProps) {
                       if (coords.length >= 3) {
                         const geojson = {
                           type: 'Polygon',
-                          coordinates: [[...coords, coords[0]]], // Close the polygon
+                          coordinates: [[...coords, coords[0]]],
                         };
                         setPolygonGeoJSON(JSON.stringify(geojson));
-                        setFilterMode('latlng'); // Switch to lat/lng mode temporarily to show filter
-                        setFilterMode('none'); // Clear mode to prevent polygon from being applied via lat/lng
-
-                        // Actually, let's just apply this filter somehow
+                        setFilterMode('none');
                         setQueryParams({ ...queryParams });
                       }
                     }}
@@ -416,6 +445,18 @@ export default function MapPage({}: MapViewProps) {
           )}
         </div>
 
+        {/* Active observation badge */}
+        {activeObservationId && (
+          <div className="absolute bottom-4 right-4 z-[1000] p-3 bg-cyan-600/90 border border-cyan-400/40 rounded-lg shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <Navigation2 className="w-4 h-4 text-white animate-bounce" />
+              <span className="text-xs font-medium text-white">
+                Viewing observation
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Map itself */}
         <div className="h-full w-full rounded-lg overflow-hidden border border-slate-700">
           <MapContainer
@@ -424,13 +465,15 @@ export default function MapPage({}: MapViewProps) {
             className="h-full w-full"
             whenCreated={map => { mapRef.current = map; }}
             onClick={e => handleMapClick(e.latlng.lat, e.latlng.lng)}
+            onDragEnd={handleMapDragEnd}
+            onZoomEnd={handleMapDragEnd}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {/* Region overlays - regions.map is only rendered if regions is not empty */}
+            {/* Region overlays */}
             {regions && regions.length > 0 && regions.map(region => (
               (() => {
                 try {
@@ -453,20 +496,64 @@ export default function MapPage({}: MapViewProps) {
               <path element={path} key={`drawn-${idx}`} />
             ))}
 
-            {/* Observation markers */}
+            {/* Observation markers - CLICKABLE */}
             {(observations || []).map(obs => {
               if (!obs.location_wkt) return null;
-              const [lng, lat] = obs.location_wkt.trim().split(/\s+/).map(Number);
-              if (isNaN(lat) || isNaN(lng)) return null;
-
+              const coords = parseWKT(obs.location_wkt);
+              if (!coords) return null;
+              const [lng, lat] = coords;
               const color = CLASSIFICATION_COLORS[obs.classification_status] || '#94a3b8';
-              const markerIcon = new L.Icon({
-                iconUrl: `data:image/svg+xml,${encodeURIComponent(`
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 20 30">
-                    <circle cx="10" cy="10" r="8" fill="${color}" stroke="white" stroke-width="2"/>
-                    <path d="M10 10 L10 25 A10 10 0 0 1 0 25 A10 10 0 0 1 20 25 L10 10Z" fill="${color}" opacity="0.7"/>
-                  </svg>
-                `)}`,
+              const isActive = activeObservationId === obs.id;
+              const freqGrad = freqColor(obs.frequency_start, obs.frequency_end);
+
+              const activeIcon = new L.DivIcon({
+                className: '',
+                html: `
+                  <div style="position: relative; width: 24px; height: 24px;">
+                    <div style="
+                      position: absolute; inset: -4px;
+                      border-radius: 50%; border: 2px solid ${color};
+                      animation: pulse 1.5s ease-in-out infinite;
+                      opacity: 0.6;
+                    "></div>
+                    <div style="
+                      position: absolute; inset: 0; border-radius: 50%;
+                      background: ${color};
+                      box-shadow: 0 0 8px ${color}, 0 0 16px ${color}40;
+                    "></div>
+                  </div>
+                  <style>
+                    @keyframes pulse {
+                      0%, 100% { transform: scale(1); opacity: 0.6; }
+                      50% { transform: scale(1.5); opacity: 0; }
+                    }
+                  </style>
+                `,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+              });
+
+              const normalIcon = new L.DivIcon({
+                className: '',
+                html: `
+                  <div style="position: relative; width: 20px; height: 30px;">
+                    <div style="
+                      position: absolute; top: 0; left: 2px;
+                      width: 16px; height: 16px; border-radius: 50%;
+                      background: ${color};
+                      border: 2px solid white;
+                      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+                    "></div>
+                    <div style="
+                      position: absolute; top: 14px; left: 2px;
+                      width: 0; height: 0;
+                      border-left: 6px solid transparent;
+                      border-right: 6px solid transparent;
+                      border-top: 12px solid ${color};
+                      opacity: 0.7;
+                    "></div>
+                  </div>
+                `,
                 iconSize: [20, 30],
                 iconAnchor: [10, 30],
               });
@@ -474,19 +561,97 @@ export default function MapPage({}: MapViewProps) {
               return (
                 <Marker
                   key={obs.id}
-                  position={[lat, lng]}
-                  icon={markerIcon}
+                  position={coords}
+                  icon={isActive ? activeIcon : normalIcon}
+                  eventHandlers={{
+                    click: () => flyToObservation(obs),
+                  }}
                 >
-                  <Popup>
-                    <div className="p-1">
-                      <h3 className="font-bold text-gray-900">#{obs.id}</h3>
-                      <p><strong>Frequency:</strong> {obs.frequency_start.toFixed(3)} – {obs.frequency_end.toFixed(3)} MHz</p>
-                      <p><strong>Modulation:</strong> {obs.modulation_type || 'N/A'}</p>
-                      <p><strong>Bandwidth:</strong> {obs.bandwidth != null ? `${obs.bandwidth.toFixed(3)} MHz` : 'N/A'}</p>
-                      <p><strong>Strength:</strong> {obs.signal_strength != null ? `${obs.signal_strength.toFixed(1)} dBm` : 'N/A'}</p>
-                      <p><strong>Classification:</strong> <span style={{ color }}>{obs.classification_status}</span></p>
-                      <p><strong>Timestamp:</strong> {new Date(obs.timestamp).toLocaleString()}</p>
-                      <p><strong>Lat/Lng:</strong> {lat.toFixed(6)}, {lng.toFixed(6)}</p>
+                  <Popup className="max-w-xs">
+                    <div className="p-2">
+                      {/* Classification color bar */}
+                      <div
+                        className="h-1.5 w-full rounded mb-2"
+                        style={{ background: color }}
+                      />
+
+                      {/* Observation ID badge */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-mono text-slate-500">#{obs.id.slice(0, 8)}</span>
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
+                          style={{ 
+                            backgroundColor: color + '20', 
+                            color: color 
+                          }}
+                        >
+                          {obs.classification_status}
+                        </span>
+                      </div>
+
+                      {/* Frequency range with visual bar */}
+                      <div className="mb-2">
+                        <div className="text-xs text-slate-400 mb-0.5">Frequency</div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm font-bold text-cyan-400 font-mono">
+                            {obs.frequency_start.toFixed(1)}
+                          </span>
+                          <div className="flex-1 h-1.5 rounded-full bg-slate-200 relative overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: '100%',
+                                background: `linear-gradient(to right, ${color}, ${color}80)`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm font-bold text-cyan-400 font-mono">
+                            {obs.frequency_end.toFixed(1)}
+                          </span>
+                          <span className="text-xs text-slate-500">MHz</span>
+                        </div>
+                      </div>
+
+                      {/* Signal strength bar */}
+                      {obs.signal_strength != null && (
+                        <div className="mb-2">
+                          <div className="text-xs text-slate-400 mb-0.5">Strength</div>
+                          <div
+                            className="h-1.5 w-24 rounded-full overflow-hidden bg-slate-200"
+                          >
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, (obs.signal_strength + 100) / 100 * 100))}%`,
+                                background: obs.signal_strength > -50 ? '#10b981' : obs.signal_strength > -70 ? '#f59e0b' : '#ef4444',
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-500">{obs.signal_strength} dBm</span>
+                        </div>
+                      )}
+
+                      {/* Modulation & Timestamp */}
+                      <div className="flex gap-3 mb-3 text-xs text-slate-600">
+                        <span>Mod: {obs.modulation_type || 'N/A'}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mb-3">
+                        {obs.timestamp ? new Date(obs.timestamp).toLocaleString() : 'N/A'}
+                      </div>
+
+                      {/* Lat/Lng + Fly-to button */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {lat.toFixed(4)}, {lng.toFixed(4)}
+                        </span>
+                        <button
+                          onClick={() => flyToObservation(obs)}
+                          className="ml-auto flex items-center gap-1 px-2 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-medium rounded transition-colors"
+                        >
+                          <Navigation2 className="w-3 h-3" />
+                          Fly to
+                        </button>
+                      </div>
                     </div>
                   </Popup>
                 </Marker>
@@ -496,7 +661,7 @@ export default function MapPage({}: MapViewProps) {
         </div>
       </div>
 
-      {/* Right panel - Observations list on map */}
+      {/* Right panel - Observations list */}
       <div className="w-80 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col">
         <div className="p-3 border-b border-slate-800">
           <h4 className="text-sm font-semibold text-white mb-2">Locate Observations</h4>
@@ -522,14 +687,18 @@ export default function MapPage({}: MapViewProps) {
                 locateResults.map(obs => (
                   <button
                     key={obs.id}
-                    className="w-full text-left p-2 bg-slate-800 hover:bg-slate-700 rounded text-sm transition-colors"
+                    className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                      activeObservationId === obs.id 
+                        ? 'bg-cyan-600/30 border border-cyan-500/40' 
+                        : 'bg-slate-800 hover:bg-slate-700'
+                    }`}
                     onClick={() => flyToObservation(obs)}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: CLASSIFICATION_COLORS[obs.classification_status] || "#94a3b8" }} />
                       <span className="text-white text-xs truncate">#{obs.id.slice(0, 8)}..</span>
                     </div>
-                    <div className="text-xs text-cyan-400">
+                    <div className="text-xs text-cyan-400 mt-1">
                       {obs.frequency_start.toFixed(1)}-{obs.frequency_end.toFixed(1)} MHz
                     </div>
                   </button>
@@ -559,32 +728,61 @@ export default function MapPage({}: MapViewProps) {
               No observations match the current filter.
             </div>
           )}
-          {!loading && observations.map(obs => (
-            <div key={obs.id} className="p-3 border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-              <div className="flex items-start gap-2">
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                  style={{ background: CLASSIFICATION_COLORS[obs.classification_status] || '#94a3b8' }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
-                    #{obs.id}
-                  </p>
-                  <p className="text-xs text-cyan-400 font-mono">
-                    {obs.frequency_start.toFixed(3)}–{obs.frequency_end.toFixed(3)} MHz
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {obs.modulation_type || 'N/A'} · {(obs.signal_strength ?? 'N/A').toLocaleString()} dBm
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {obs.location_wkt
-                      ? obs.location_wkt.trim().split(/\s+/).reverse().map(Number).join(', ')
-                      : 'No location'}
-                  </p>
+          {!loading && observations.map(obs => {
+            const isActive = activeObservationId === obs.id;
+            const color = CLASSIFICATION_COLORS[obs.classification_status] || '#94a3b8';
+            const locCoords = parseWKT(obs.location_wkt);
+
+            return (
+              <div
+                key={obs.id}
+                className={`p-3 border-b border-slate-800 transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-cyan-600/20 border-l-4 border-l-cyan-500'
+                    : 'hover:bg-slate-800/50'
+                }`}
+                onClick={() => flyToObservation(obs)}
+              >
+                <div className="flex items-start gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0 mt-1 ring-2 ring-offset-1 ring-offset-slate-900"
+                    style={{ 
+                      background: color,
+                      boxShadow: isActive ? `0 0 8px ${color}, 0 0 16px ${color}40` : `0 0 4px ${color}40`
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white truncate">
+                        #{obs.id.slice(0, 8)}
+                      </p>
+                      {isActive && (
+                        <Navigation2 className="w-3 h-3 text-cyan-400 animate-bounce flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-cyan-400 font-mono">
+                      {Math.abs(obs.frequency_start).toFixed(1)}–{Math.abs(obs.frequency_end).toFixed(1)} MHz
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-slate-400">
+                        {obs.modulation_type || 'N/A'} · {Math.abs(obs.signal_strength).toFixed(0)} dBm
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {locCoords 
+                        ? `${Math.abs(locCoords[1]).toFixed(4)}, ${Math.abs(locCoords[0]).toFixed(4)}`
+                        : 'No location'}
+                    </p>
+                  </div>
                 </div>
+                {/* Classification color bar on list item */}
+                <div
+                  className="h-0.5 w-full mt-2 rounded"
+                  style={{ background: color }}
+                />
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
