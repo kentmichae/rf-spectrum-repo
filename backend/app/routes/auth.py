@@ -9,7 +9,7 @@ import bcrypt
 from jose import jwt, JWTError
 
 from ..database import get_db
-from ..schemas import LoginRequest, TokenResponse, UserRead
+from ..schemas import LoginRequest, TokenResponse, UserRead, UserCreate
 from ..config import settings
 from ..models import User as UserModel
 
@@ -72,6 +72,30 @@ def get_current_user_from_request(
     user = db.query(UserModel).filter(UserModel.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+@router.post("/register", tags=["auth"])
+def register(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
+    """Register a new user account."""
+    # Check for duplicate username/email
+    existing_user = db.query(UserModel).filter(UserModel.username == payload.username).first()
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Username already registered")
+    existing_email = db.query(UserModel).filter(UserModel.email == payload.email).first()
+    if existing_email:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    
+    user = UserModel(
+        username=payload.username,
+        email=payload.email,
+        password_hash=_hash_password(payload.password),
+        role=payload.role,
+        region_id=payload.region_id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 

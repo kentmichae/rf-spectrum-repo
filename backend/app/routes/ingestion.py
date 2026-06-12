@@ -103,7 +103,16 @@ def _build_one(raw: dict) -> Observation:
     if not loc_wkt:
         raise ValueError(f"Missing required field 'location_wkt'")
 
-    loc = WKTElement(f"POINT({loc_wkt})", srid=4326)
+    # Normalize the WKT input - strip POINT() if already wrapped
+    loc_raw = loc_wkt.strip()
+    if loc_raw.upper().startswith("POINT("):
+        # Input is already POINT(lng lat) format
+        coords = loc_raw[6:-1].split()
+        loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
+    else:
+        # Input is just coordinates like "-77.0 38.9"
+        coords = loc_raw.split()
+        loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
 
     freq_start_str = raw.get("frequency_start")
     freq_end_str = raw.get("frequency_end")

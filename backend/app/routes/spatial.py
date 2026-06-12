@@ -3,6 +3,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from geoalchemy2 import WKTElement, shape
 
@@ -11,6 +12,26 @@ from ..schemas import RegionCreate, RegionUpdate, RegionRead
 from ..models import Region, Observation
 
 router = APIRouter()
+
+
+def _wkt_to_latlng(wkt: str) -> dict:
+    """Parse a WKT POINT string into {'lat': float, 'lng': float}."""
+    if not wkt:
+        return {"lat": 0.0, "lng": 0.0}
+    try:
+        wkt = wkt.strip()
+        # Handle "POINT(lng lat)" format from ST_AsText
+        if wkt.upper().startswith("POINT("):
+            coords = wkt[6:-1].split()
+            return {"lng": float(coords[0]), "lat": float(coords[1])}
+        if wkt.upper().startswith("MULTIPOINT("):
+            inner = wkt[wkt.index("(")+1:wkt.rindex(")")]
+            first = inner.split()[0]
+            inner_coords = first.strip("()").split()
+            return {"lng": float(inner_coords[0]), "lat": float(inner_coords[1])}
+    except (ValueError, IndexError):
+        pass
+    return {"lat": 0.0, "lng": 0.0}
 
 
 @router.get("/observations/by_region", tags=["spatial"])
@@ -37,7 +58,7 @@ def get_observations_by_region(
             "frequency_end": o.frequency_end,
             "signal_strength": o.signal_strength,
             "classification": o.classification_status,
-            "location": {"lat": o.location.y, "lng": o.location.x} if o.location else None,
+            "location": _wkt_to_latlng(str(o.location) if o.location else ""),
         }
         for o in observations
     ]
@@ -52,24 +73,22 @@ def get_observations_by_distance(
 ) -> List[dict]:
     """Get observations within a radius (km) of a point."""
     point_wkt = f"POINT({lng} {lat})"
-    point_geom = WKTElement(point_wkt, srid=4326)
     radius_m = radius_km * 1000
 
-    observations = db.query(Observation).filter(
-        Observation.location.ST_DWithin(point_geom, radius_m)
-    ).all()
+    results = db.execute(
+        text("""SELECT id, observation_uuid, frequency_start, frequency_end,
+                    signal_strength, classification_status,
+                    ST_AsText(location) AS location_wkt,
+                    ST_Distance(location, ST_GeomFromText(:point_wkt, 4326)) / 1000.0 AS distance_km
+              FROM observations
+              WHERE ST_DWithin(location, ST_GeomFromText(:point_wkt, 4326), :radius_m)
+              ORDER BY distance_km"""),
+        {"point_wkt": point_wkt, "radius_m": radius_m}
+    ).mappings().all()
 
     return [
-        {
-            "id": str(o.id),
-            "observation_uuid": str(o.observation_uuid),
-            "frequency_start": o.frequency_start,
-            "frequency_end": o.frequency_end,
-            "signal_strength": o.signal_strength,
-            "classification": o.classification_status,
-            "distance_km": round(o.location.ST_Distance(point_geom) * 0.001, 2),
-        }
-        for o in observations
+        {**r, "location": _wkt_to_latlng(r["location_wkt"])}
+        for r in results
     ]
 
 
@@ -135,7 +154,7 @@ def get_observations_by_bbox(
             "frequency_end": o.frequency_end,
             "signal_strength": o.signal_strength,
             "classification": o.classification_status,
-            "location": {"lat": o.location.y, "lng": o.location.x} if o.location else None,
+            "location": str(o.location) if o.location else None,
         }
         for o in observations
     ]

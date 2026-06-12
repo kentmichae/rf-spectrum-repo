@@ -130,6 +130,39 @@ def create_observation(
     return _obs_to_dict(obs)  # type: ignore[return-value]
 
 
+@router.post("/bulk", response_model=List[ObservationRead], tags=["observations"])
+def create_bulk_observations(
+    payload: ObservationBulkCreate,
+    db: Session = Depends(get_db),
+):
+    """Bulk create observation records."""
+    created = []
+    for record in payload.records:
+        loc = WKTElement(record.location_wkt, srid=4326)
+        obs = Observation(
+            observation_uuid=uuid.uuid4(),
+            version=1,
+            timestamp=record.timestamp,
+            frequency_start=record.frequency_start,
+            frequency_end=record.frequency_end,
+            bandwidth=record.bandwidth,
+            modulation_type=record.modulation_type,
+            signal_strength=record.signal_strength,
+            classification_status=record.classification_status,
+            notes=record.notes,
+            equipment_id=record.equipment_id,
+            technician_id=record.technician_id,
+            location=loc,
+            is_current=True,
+        )
+        db.add(obs)
+        created.append(obs)
+    db.commit()
+    for obs in created:
+        db.refresh(obs)
+    return [_obs_to_dict(o) for o in created]  # type: ignore[return-value]
+
+
 @router.get("/{obs_id}", response_model=ObservationRead, tags=["observations"])
 def get_observation(
     obs_id: uuid.UUID,
