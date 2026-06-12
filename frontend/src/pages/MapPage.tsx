@@ -69,7 +69,8 @@ export default function MapPage({}: MapViewProps) {
     setError(null);
     try {
       const data = await apiObservations.list(queryParams);
-      setObservations(data.data);
+      // Backend returns a plain array, not { data: [] }
+      setObservations(Array.isArray(data) ? data : (data?.data ?? []));
     } catch (err: any) {
       setError(err.message || 'Failed to load observations on map');
       setObservations([]);
@@ -352,30 +353,31 @@ export default function MapPage({}: MapViewProps) {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {/* Region overlays */}
-            {regions.map(region => {
-              try {
-                if (region.geometry_wkt) {
-                  // Parse WKT to GeoJSON roughly (simplified)
-                  return (
-                    <Popup key={region.id}>
-                      <strong>{region.name}</strong>
-                      <br />
-                      {region.description}
-                    </Popup>
-                  );
-                }
-              } catch { /* ignore invalid geometry */ }
-              return null;
-            })}
+            {/* Region overlays - regions.map is only rendered if regions is not empty */}
+            {regions && regions.length > 0 && regions.map(region => (
+              (() => {
+                try {
+                  if (region.geometry_wkt) {
+                    return (
+                      <Popup key={region.id}>
+                        <strong>{region.name}</strong>
+                        <br />
+                        {region.description}
+                      </Popup>
+                    );
+                  }
+                } catch { /* ignore invalid geometry */ }
+                return null;
+              })()
+            ))}
 
             {/* Drawn polygon */}
-            {drawnPaths.map((path, idx) => (
+            {(drawnPaths || []).map((path, idx) => (
               <path element={path} key={`drawn-${idx}`} />
             ))}
 
             {/* Observation markers */}
-            {observations.map(obs => {
+            {(observations || []).map(obs => {
               if (!obs.location_wkt) return null;
               const [lng, lat] = obs.location_wkt.trim().split(/\s+/).map(Number);
               if (isNaN(lat) || isNaN(lng)) return null;

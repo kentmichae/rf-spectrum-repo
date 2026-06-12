@@ -100,18 +100,18 @@ export const apiObservations = {
     });
   },
 
-  get: (id: number): Promise<Observation> => {
+  get: (id: string): Promise<Observation> => {
     return fetchApi<Observation>(`/observations/${id}`);
   },
 
-  update: (id: number, payload: ObservationUpdatePayload): Promise<Observation> => {
+  update: (id: string, payload: ObservationUpdatePayload): Promise<Observation> => {
     return fetchApi<Observation>(`/observations/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   },
 
-  delete: (id: number): Promise<void> => {
+  delete: (id: string): Promise<void> => {
     return fetchApi<void>(`/observations/${id}`, {
       method: 'DELETE',
     });
@@ -131,14 +131,14 @@ export const apiUsers = {
     });
   },
 
-  update: (id: number, payload: Partial<UserCreatePayload>): Promise<User> => {
+  update: (id: string, payload: Partial<UserCreatePayload>): Promise<User> => {
     return fetchApi<User>(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
   },
 
-  delete: (id: number): Promise<void> => {
+  delete: (id: string): Promise<void> => {
     return fetchApi<void>(`/users/${id}`, { method: 'DELETE' });
   },
 };
@@ -157,21 +157,22 @@ export const apiEquipment = {
   },
 };
 
-// --- Regions (placeholder - no endpoint yet) ---
-// These exist in the schema/models but the backend has no regions router.
-// The frontend should only call these after regions router is implemented.
+// --- Regions ---
 export const apiRegions = {
-  list: (withGeometry?: boolean): Promise<Region[]> => {
-    // Placeholder - returns empty array until /api/regions endpoint exists
-    return Promise.resolve([]);
+  list: (withGeometry: boolean = false): Promise<Region[]> => {
+    const qs = withGeometry ? '?geometry=true' : '';
+    return fetchApi<Region[]>(`/spatial/regions${qs}`);
   },
 
   create: (payload: RegionCreatePayload): Promise<Region> => {
-    throw new Error('apiRegions.create: no backend endpoint yet');
+    return fetchApi<Region>('/spatial/regions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
-  delete: (id: number): Promise<void> => {
-    throw new Error('apiRegions.delete: no backend endpoint yet');
+  delete: (id: string): Promise<void> => {
+    return fetchApi<void>(`/spatial/regions/${id}`, { method: 'DELETE' });
   },
 };
 

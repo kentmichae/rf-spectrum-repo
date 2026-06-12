@@ -204,7 +204,7 @@ def update_observation(
         ),
         notes=update_data.get("notes", obs.notes),
         equipment_id=update_data.get("equipment_id", obs.equipment_id),
-        technician_id=obs.technician_id,
+        technician_id=update_data.get("technician_id", obs.technician_id),
         location=obs.location,
         is_current=True,
     )
