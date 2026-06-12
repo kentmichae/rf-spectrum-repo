@@ -63,6 +63,37 @@ export default function MapPage({}: MapViewProps) {
 
   // Map ref for center
   const mapRef = useRef<L.Map | null>(null);
+  
+  // Locate state
+  const [locateSearch, setLocateSearch] = useState('');
+  const [locateResults, setLocateResults] = useState<Observation[]>([]);
+  const [showLocateResults, setShowLocateResults] = useState(false);
+
+  // WKT parsing utility - extracts [lat, lng] from POINT WKT strings
+  const parseWKT = (wkt: string): [number, number] | null => {
+    if (!wkt) return null;
+    const pointMatch = wkt.match(/POINT\\s*\\([^\\s]+\\s+([\\)]+)\\)/);
+    if (pointMatch) {
+      const parts = pointMatch[1].trim().split(/\\s+/);
+      if (parts.length >= 2) {
+        const lng = parseFloat(parts[0]);
+        const lat = parseFloat(parts[1]);
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          return [lat, lng];
+        }
+      }
+    }
+    // Fallback: find any two adjacent numbers
+    const nums = wkt.match(/-?[0-9]+\\.?[0-9]*/g);
+    if (nums && nums.length >= 2) {
+      const a = parseFloat(nums[0]);
+      const b = parseFloat(nums[1]);
+      if (!isNaN(a) && !isNaN(b)) {
+        return [Math.abs(b), Math.abs(a)];
+      }
+    }
+    return null;
+  };
 
   // Load observations
   const loadObservations = useCallback(async () => {
@@ -127,6 +158,51 @@ export default function MapPage({}: MapViewProps) {
       setCoordsInput('');
       setPolygonGeoJSON(null);
       setQueryParams({});
+    }
+  };
+
+  // Locate observations: search and zoom to observation
+  const handleLocateObservation = async () => {
+    if (!locateSearch.trim()) {
+      setLocateResults([]);
+      setShowLocateResults(false);
+      return;
+    }
+    
+    try {
+      const allObs = await apiObservations.list({ page_size: 100 });
+      const results: Observation[] = Array.isArray(allObs) 
+        ? allObs 
+        : (allObs?.data ?? []);
+      
+      const search = locateSearch.toLowerCase().trim();
+      const filtered = results.filter(obs => 
+        obs.id.toLowerCase().includes(search) ||
+        obs.frequency_start.toFixed(3).includes(search) ||
+        obs.frequency_end.toFixed(3).includes(search) ||
+        obs.classification_status.toLowerCase().includes(search) ||
+        (obs.signal_strength != null && obs.signal_strength.toFixed(0).includes(search))
+      );
+      
+      setLocateResults(filtered);
+      setShowLocateResults(true);
+      
+      if (filtered.length > 0 && mapRef.current) {
+        const coords = parseWKT(filtered[0].location_wkt);
+        if (coords) mapRef.current.flyTo(coords, 15);
+      }
+    } catch {
+      setLocateResults([]);
+      setShowLocateResults(false);
+    }
+  };
+
+  const flyToObservation = (obs: Observation) => {
+    const coords = parseWKT(obs.location_wkt);
+    if (coords && mapRef.current) {
+      mapRef.current.flyTo(coords, 15);
+      setLocateSearch(obs.id);
+      setFilterMode('none');
     }
   };
 
@@ -422,6 +498,48 @@ export default function MapPage({}: MapViewProps) {
 
       {/* Right panel - Observations list on map */}
       <div className="w-80 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col">
+        <div className="p-3 border-b border-slate-800">
+          <h4 className="text-sm font-semibold text-white mb-2">Locate Observations</h4>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              value={locateSearch}
+              onChange={e => setLocateSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleLocateObservation()}
+              placeholder="ID, freq, class, strength..."
+              className="flex-1 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-white text-sm"
+            />
+            <button
+              onClick={handleLocateObservation}
+              className="px-2 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded"
+            >
+              {locateSearch.trim() ? <Search className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+            </button>
+          </div>
+          {showLocateResults && (
+            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+              {locateResults.length > 0 ? (
+                locateResults.map(obs => (
+                  <button
+                    key={obs.id}
+                    className="w-full text-left p-2 bg-slate-800 hover:bg-slate-700 rounded text-sm transition-colors"
+                    onClick={() => flyToObservation(obs)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ background: CLASSIFICATION_COLORS[obs.classification_status] || "#94a3b8" }} />
+                      <span className="text-white text-xs truncate">#{obs.id.slice(0, 8)}..</span>
+                    </div>
+                    <div className="text-xs text-cyan-400">
+                      {obs.frequency_start.toFixed(1)}-{obs.frequency_end.toFixed(1)} MHz
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500">No observations found</p>
+              )}
+            </div>
+          )}
+        </div>
         <div className="p-4 border-b border-slate-800">
           <h3 className="text-lg font-semibold text-white">
             Map Observations
