@@ -84,11 +84,11 @@ export async function getDBStatus() {
 
 // --- Spatial ---
 export async function getRegions() {
-  return fetchWith(`${API_BASE}/api/observations/spatial/regions`);
+  return fetchWith(`${API_BASE}/api/spatial/regions`);
 }
 
 export async function getObservationsByRegion(regionId: string) {
-  return fetchWith(`${API_BASE}/api/observations/spatial/observations/by_region?region_id=${regionId}`);
+  return fetchWith(`${API_BASE}/api/spatial/observations/by_region?region_id=${regionId}`);
 }
 
 // --- Sync ---

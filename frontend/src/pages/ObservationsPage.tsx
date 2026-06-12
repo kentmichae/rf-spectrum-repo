@@ -23,7 +23,7 @@ export default function ObservationsPage() {
 
   // Editor state
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [formData, setFormData] = useState<ObservationCreatePayload>({
     timestamp: new Date().toISOString().slice(0, 19),
@@ -67,8 +67,11 @@ export default function ObservationsPage() {
         }
       }
       const data = await apiObservations.list(params);
-      setObservations(data.data);
-      setTotal(data.total);
+      // Backend returns a plain array, not a paginated envelope
+      const observations = Array.isArray(data) ? data : (data?.data ?? []);
+      const total = data?.total ?? observations.length;
+      setObservations(observations);
+      setTotal(total);
     } catch (err: any) {
       setError(err.message || 'Failed to load observations');
       setObservations([]);
@@ -184,7 +187,7 @@ export default function ObservationsPage() {
   };
 
   // Delete observation
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this observation?')) return;
     try {
       await apiObservations.delete(id);
