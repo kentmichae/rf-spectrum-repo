@@ -23,6 +23,12 @@ EXPECTED_FIELDS = [
 ]
 
 
+class JSONIngestionPayload(BaseModel):
+    """Payload for JSON/CSV ingestion via route."""
+    data: List[dict]
+    source: str = "frontend"
+
+
 @router.post("/upload", tags=["ingestion"])
 def upload_observations(
     file: UploadFile = File(...),
@@ -151,3 +157,44 @@ def _parse_csv(content: bytes) -> List[dict]:
     text_content = content.decode("utf-8")
     reader = csv.DictReader(StringIO(text_content))
     return list(reader)
+
+
+# --- JSON/CSV ingestion endpoints for frontend ---
+
+@router.post("/json", tags=["ingestion"])
+def ingest_json(payload: JSONIngestionPayload, db: Session = Depends(get_db)) -> dict:
+    """Bulk ingest observations from a JSON array payload."""
+    processed = 0
+    errors: List[str] = []
+    job_id = uuid.uuid4()
+
+    for idx, raw in enumerate(payload.data):
+        try:
+            obs_list = _build_one(raw)
+            if isinstance(obs_list, list):
+                for obs in obs_list:
+                    db.add(obs)
+                    db.flush()
+                processed += len(obs_list)
+            else:
+                db.add(obs_list)
+                db.flush()
+                processed += 1
+        except Exception as exc:
+            errors.append(f"Row {idx}: {exc}")
+
+    db.commit()
+
+    return {
+        "job_id": job_id,
+        "status": "completed",
+        "total_records": len(payload.data),
+        "processed": processed,
+        "errors": errors,
+    }
+
+
+@router.post("/csv", tags=["ingestion"])
+def ingest_csv(payload: JSONIngestionPayload, db: Session = Depends(get_db)) -> dict:
+    """Bulk ingest observations treating the JSON array like CSV rows."""
+    return ingest_json(payload, db)

@@ -1,17 +1,47 @@
 """Sync router - incremental sync between field nodes and core."""
 import uuid
 import time
-from typing import List
+import logging
+from typing import Any, Dict, List
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..schemas import SyncRequest, SyncResponse
 from ..models import Observation, AuditTrail
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
+
+# --- Helper schemas for status ---
+
+class SyncStatusResponse(BaseModel):
+    """Status response for GET /sync/status."""
+    status: str = "ok"
+    last_sync_at: str | None = None
+    last_sync_epoch: int | None = None
+    pending_uploads: int = 0
+    pending_downloads: int = 0
+    last_sync_status: str = "idle"
+    nodes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SyncTriggerResponse(BaseModel):
+    """Response for POST /sync/trigger."""
+    status: str = "ok"
+    sync_triggered: bool = True
+    pending_records: int = 0
+    active_syncs: int = 0
+    message: str = "Sync initiated successfully"
+
+
+# --- Sync routes ---
 
 @router.post("", tags=["sync"])
 def sync(payload: SyncRequest, db: Session = Depends(get_db)):
@@ -103,6 +133,28 @@ def get_sync_status(client_id: str = Query(default="unknown"), db: Session = Dep
     }
 
 
+# Alias route for frontend compatibility: GET /api/sync/status
+@router.get("/status", tags=["sync"])
+def get_sync_status_alias(client_id: str = Query(default="unknown"), db: Session = Depends(get_db)) -> SyncStatusResponse:
+    """Alias for frontend — GET /api/sync/status."""
+    last_sync = db.query(AuditTrail).order_by(AuditTrail.change_timestamp.desc()).first()
+    # Use last_sync_epoch to identify recent records (simpler query)
+    pending_uploads = 0
+    if last_sync and last_sync.change_timestamp:
+        # Count records synced since the last sync
+        pending_uploads = db.query(Observation).filter(
+            Observation.timestamp > last_sync.change_timestamp
+        ).count()
+
+    return SyncStatusResponse(
+        status="ok",
+        last_sync_at=last_sync.change_timestamp.isoformat() if last_sync and last_sync.change_timestamp else None,
+        last_sync_epoch=int(last_sync.change_timestamp.timestamp()) if last_sync and last_sync.change_timestamp else None,
+        pending_uploads=max(pending_uploads, 0),
+        last_sync_status="completed" if last_sync else "idle",
+    )
+
+
 @router.post("/trigger", tags=["sync"])
 def sync_trigger(db: Session = Depends(get_db)):
     """Trigger a full sync — returns current state of all pending/active syncs."""
@@ -121,3 +173,16 @@ def sync_trigger(db: Session = Depends(get_db)):
         "active_syncs": active_count,
         "message": "Sync initiated successfully",
     }
+
+
+# Alias routes for frontend compatibility
+@router.post("/json", tags=["sync"])
+def sync_json(payload: SyncRequest, db: Session = Depends(get_db)):
+    """Alias for frontend — POST /api/sync/json."""
+    return sync(payload, db)
+
+
+@router.post("/csv", tags=["sync"])
+def sync_csv(payload: SyncRequest, db: Session = Depends(get_db)):
+    """Alias for frontend — POST /api/sync/csv."""
+    return sync(payload, db)
