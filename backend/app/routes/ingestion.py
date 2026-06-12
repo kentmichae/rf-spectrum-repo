@@ -5,6 +5,7 @@ from io import StringIO
 from typing import List, Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 from geoalchemy2 import WKTElement
 from sqlalchemy.orm import Session
 
