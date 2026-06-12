@@ -12,9 +12,8 @@
  * - IMPROVED POPUP: "View on Map" button, frequency range bar, classification color bar
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import * as leaflet from 'leaflet';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import * as L from 'leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiObservations, apiRegions } from '../lib/api-client';
 import type { Observation, Region, ObservationQueryParams } from '../types/api';
@@ -48,8 +47,34 @@ function freqColor(start: number, end: number): string {
   const r = Math.round(6 + t * 180);
   const g = Math.round(182 - t * 120);
   const b = Math.round(229 - t * 140);
-  return `rgb(${r},${g},${b})`;
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
+
+// WKT parsing utility - extracts [lat, lng] from POINT WKT strings
+const parseWKT = (wkt: string | null | undefined): [number, number] | null => {
+  if (!wkt) return null;
+  const pointMatch = wkt.match(/POINT\s*\(([^\\s]+)\s+([^\)]+)\)/);
+  if (pointMatch) {
+    const parts = pointMatch[1].trim().split(/\s+/);
+    if (parts.length >= 2) {
+      const lng = parseFloat(parts[0]);
+      const lat = parseFloat(parts[1]);
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return [lat, lng];
+      }
+    }
+  }
+  // Fallback: find any two adjacent numbers
+  const nums = wkt.match(/-?[0-9]+\.?[0-9]*/g);
+  if (nums && nums.length >= 2) {
+    const a = parseFloat(nums[0]);
+    const b = parseFloat(nums[1]);
+    if (!isNaN(a) && !isNaN(b)) {
+      return [Math.abs(b), Math.abs(a)];
+    }
+  }
+  return null;
+};
 
 interface MapViewProps {
   // Allow parent to pass observations if needed, but we'll fetch them ourselves
@@ -81,37 +106,11 @@ export default function MapPage({}: MapViewProps) {
 
   // Map ref for center
   const mapRef = useRef<L.Map | null>(null);
-  
+
   // Locate state
   const [locateSearch, setLocateSearch] = useState('');
   const [locateResults, setLocateResults] = useState<Observation[]>([]);
   const [showLocateResults, setShowLocateResults] = useState(false);
-
-  // WKT parsing utility - extracts [lat, lng] from POINT WKT strings
-  const parseWKT = (wkt: string): [number, number] | null => {
-    if (!wkt) return null;
-    const pointMatch = wkt.match(/POINT\s*\(([^\s]+)\s+([^\)]+)\)/);
-    if (pointMatch) {
-      const parts = pointMatch[1].trim().split(/\s+/);
-      if (parts.length >= 2) {
-        const lng = parseFloat(parts[0]);
-        const lat = parseFloat(parts[1]);
-        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          return [lat, lng];
-        }
-      }
-    }
-    // Fallback: find any two adjacent numbers
-    const nums = wkt.match(/-?[0-9]+\.?[0-9]*/g);
-    if (nums && nums.length >= 2) {
-      const a = parseFloat(nums[0]);
-      const b = parseFloat(nums[1]);
-      if (!isNaN(a) && !isNaN(b)) {
-        return [Math.abs(b), Math.abs(a)];
-      }
-    }
-    return null;
-  };
 
   // Load observations
   const loadObservations = useCallback(async () => {
@@ -119,7 +118,6 @@ export default function MapPage({}: MapViewProps) {
     setError(null);
     try {
       const data = await apiObservations.list(queryParams);
-      // Backend returns a plain array, not { data: [] }
       setObservations(Array.isArray(data) ? data : (data?.data ?? []));
     } catch (err: any) {
       setError(err.message || 'Failed to load observations on map');
@@ -186,25 +184,25 @@ export default function MapPage({}: MapViewProps) {
       setShowLocateResults(false);
       return;
     }
-    
+
     try {
       const allObs = await apiObservations.list({ page_size: 100 });
-      const results: Observation[] = Array.isArray(allObs) 
-        ? allObs 
+      const results: Observation[] = Array.isArray(allObs)
+        ? allObs
         : (allObs?.data ?? []);
-      
+
       const search = locateSearch.toLowerCase().trim();
-      const filtered = results.filter(obs => 
-        obs.id.toLowerCase().includes(search) ||
-        obs.frequency_start.toFixed(3).includes(search) ||
-        obs.frequency_end.toFixed(3).includes(search) ||
-        obs.classification_status.toLowerCase().includes(search) ||
-        (obs.signal_strength != null && obs.signal_strength.toFixed(0).includes(search))
+      const filtered = results.filter(o =>
+        o.id.toString().toLowerCase().includes(search) ||
+        o.frequency_start.toFixed(3).includes(search) ||
+        o.frequency_end.toFixed(3).includes(search) ||
+        o.classification_status.toLowerCase().includes(search) ||
+        (o.signal_strength != null && o.signal_strength.toFixed(0).includes(search))
       );
-      
+
       setLocateResults(filtered);
       setShowLocateResults(true);
-      
+
       if (filtered.length > 0 && mapRef.current) {
         const coords = parseWKT(filtered[0].location_wkt);
         if (coords) mapRef.current.flyTo(coords, 15);
@@ -216,42 +214,21 @@ export default function MapPage({}: MapViewProps) {
   };
 
   // Fly-to observation: clear previous active, set new active, fly map
-  const flyToObservation = (obs: Observation) => {
+  const flyToObservation = useCallback((obs: Observation) => {
     if (clearActiveTimer.current) clearTimeout(clearActiveTimer.current);
-    
     setActiveObservationId(obs.id);
     setLocateSearch(obs.id);
     setFilterMode('none');
-    
+
     const coords = parseWKT(obs.location_wkt);
     if (coords && mapRef.current) {
       mapRef.current.flyTo(coords, 15);
     }
-    
-    // Auto-clear highlight after 8 seconds
+
     clearActiveTimer.current = setTimeout(() => {
       setActiveObservationId(null);
     }, 8000);
-  };
-
-  // Add clicked point to polygon
-  const handleMapClick = (lat: number, lng: number) => {
-    if (filterMode !== 'polygon') return;
-    const newCoords = coordsInput ? `${coordsInput}, ${lat}, ${lng}` : `${lat}, ${lng}`;
-    setCoordsInput(newCoords);
-
-    // Add marker
-    const coords = coordsInput
-      ? coordsInput.split(',').map(s => s.trim().split(/\s+/)).flat().map(Number)
-      : [lat, lng];
-
-    // For now, add to the drawn polygon
-    const polygon: L.Polygon = L.polygon(
-      [[lat, lng]],
-      { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.15, dashArray: '4 4' }
-    );
-    setDrawnPaths(prev => [...prev, polygon]);
-  };
+  }, []);
 
   // Clear active observation when map is dragged/zoomed
   const handleMapDragEnd = useCallback(() => {
@@ -259,27 +236,84 @@ export default function MapPage({}: MapViewProps) {
     setActiveObservationId(null);
   }, []);
 
+  // Add clicked point to polygon
+  const handleMapClick = (lat: number, lng: number) => {
+    if (filterMode !== 'polygon') return;
+    const newCoords = coordsInput ? coordsInput + ', ' + lat + ', ' + lng : lat + ', ' + lng;
+    setCoordsInput(newCoords);
+
+    // Add marker
+    const coords = coordsInput
+      ? coordsInput.split(',').map((s: string) => s.trim().split(/\s+/)).flat().map(Number)
+      : [lat, lng];
+
+    // For now, add to the drawn polygon
+    let latlngs: any[];
+    if (coordsInput) {
+      latlngs = coordsInput.split('\n').map((s: string) => {
+        const parts = s.trim().split(',').map(Number);
+        if (!isNaN(parts[0]) && !isNaN(parts[1])) {
+          return [parts[0], parts[1]] as [number, number];
+        }
+        return null;
+      }).filter((c: any) => c != null);
+    } else {
+      latlngs = [[lat, lng]];
+    }
+    const polygon = L.polygon(
+      latlngs,
+      { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.15, dashArray: '4 4' }
+    );
+    setDrawnPaths(prev => [...prev, polygon]);
+  };
+
   // Render polygon overlay from GeoJSON
   const renderPolygonOverlay = () => {
     if (!polygonGeoJSON) return null;
     try {
       const geojson = JSON.parse(polygonGeoJSON);
-      return L.geoJSON(geojson, {
-        style: {
-          color: '#06b6d4',
-          fillColor: '#06b6d4',
-          fillOpacity: 0.1,
-          weight: 2,
-        },
+      const layer = L.geoJSON(geojson, {
+        style: { color: '#3b82f6', weight: 2, fillOpacity: 0.1 },
       });
+      return layer;
     } catch {
       return null;
     }
   };
 
+  const handlePolygonApply = () => {
+    if (!coordsInput.trim()) return;
+    const coords = coordsInput.trim().split('\n').map((s: string) => {
+      const parts = s.trim().split(',').map(Number);
+      if (parts.length === 2) {
+        return [parts[0], parts[1]] as [number, number];
+      }
+      return null;
+    }).filter((c: any) => c != null);
+
+    if (coords.length >= 3) {
+      const geojson = {
+        type: 'Polygon' as const,
+        coordinates: [coords.concat([coords[0]]).map((c: [number, number]) => [c[1], c[0]])],
+      };
+      setPolygonGeoJSON(JSON.stringify(geojson));
+      setFilterMode('none');
+      setDrawnPaths([]);
+    }
+  };
+
+  // Hook component to get map instance in react-leaflet v4
+  const MapRefGetter = ({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) => {
+    const map = useMap();
+    useEffect(() => {
+      (mapRef as any).current = map;
+    }, [map, mapRef]);
+    return null;
+  };
+
   return (
     <div className="h-[calc(100vh-10rem)] flex gap-4">
-      {/* Left panel - Map */}
+      {/* Map area */}
       <div className="flex-1 h-full relative">
         {error && (
           <div className="absolute top-4 left-4 z-[1000] p-3 bg-red-500/90 text-white rounded-lg shadow-lg text-sm">
@@ -292,43 +326,42 @@ export default function MapPage({}: MapViewProps) {
 
         {/* Map controls */}
         <div className="space-y-2">
-          {/* Filter controls */}
           <div className="absolute top-4 right-4 z-[1000] space-y-3 w-72">
             {/* Filter mode buttons */}
             <div className="flex gap-2">
               <button
                 onClick={() => setFilterMode('none')}
-                className={`flex-1 py-2 text-xs font-medium rounded transition-colors ${
+                className={
                   filterMode === 'none'
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
-                }`}
+                    ? 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-cyan-600 text-white'
+                    : 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
+                }
               >
                 All
               </button>
               <button
                 onClick={() => setFilterMode('latlng')}
-                className={`flex-1 py-2 text-xs font-medium rounded transition-colors ${
+                className={
                   filterMode === 'latlng'
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
-                }`}
+                    ? 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-cyan-600 text-white'
+                    : 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
+                }
               >
                 Lat/Lng
               </button>
               <button
                 onClick={togglePolygonDraw}
-                className={`flex-1 py-2 text-xs font-medium rounded transition-colors ${
+                className={
                   filterMode === 'polygon'
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
-                }`}
+                    ? 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-cyan-600 text-white'
+                    : 'flex-1 py-2 text-xs font-medium rounded transition-colors bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
+                }
               >
                 <Pencil className="w-3 h-3 mx-auto" />
               </button>
             </div>
 
-            {/* Lat/Lng search panel */}
+            {/* Lat/lng filter form */}
             {filterMode === 'latlng' && (
               <div className="p-3 bg-slate-800/95 border border-slate-700 rounded-lg space-y-2">
                 <h3 className="text-sm font-semibold text-white">Spatial Filter</h3>
@@ -368,13 +401,13 @@ export default function MapPage({}: MapViewProps) {
                   onClick={applyLatLngFilter}
                   className="w-full flex items-center justify-center gap-2 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm font-medium"
                 >
-                  <Search className="w-4 h-4" />
+                  <Filter className="w-4 h-4" />
                   Filter
                 </button>
               </div>
             )}
 
-            {/* Polygon drawing panel */}
+            {/* Polygon drawing form */}
             {filterMode === 'polygon' && (
               <div className="p-3 bg-slate-800/95 border border-slate-700 rounded-lg space-y-2">
                 <h3 className="text-sm font-semibold text-white">Draw Polygon Filter</h3>
@@ -387,75 +420,28 @@ export default function MapPage({}: MapViewProps) {
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      if (!coordsInput.trim()) return;
-                      const coords = coordsInput.trim().split('\n').map(s => {
-                        const parts = s.trim().split(',').map(Number);
-                        if (parts.length === 2) {
-                          return [parts[1], parts[0]];
-                        }
-                        return null;
-                      }).filter(Boolean) as [number, number][];
-
-                      if (coords.length >= 3) {
-                        const geojson = {
-                          type: 'Polygon',
-                          coordinates: [[...coords, coords[0]]],
-                        };
-                        setPolygonGeoJSON(JSON.stringify(geojson));
-                        setFilterMode('none');
-                        setQueryParams({ ...queryParams });
-                      }
-                    }}
-                    className="flex-1 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-xs font-medium"
+                    onClick={handlePolygonApply}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-xs font-medium"
                   >
-                    Apply Region
+                    <Filter className="w-3 h-3" />
+                    Apply Polygon
                   </button>
                   <button
-                    onClick={clearFilter}
-                    className="py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+                    onClick={() => {
+                      setPolygonGeoJSON(null);
+                      setCoordsInput('');
+                      setFilterMode('none');
+                      setDrawnPaths([]);
+                    }}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
                   >
                     Clear
                   </button>
                 </div>
-                {drawnPaths.length > 0 && (
-                  <p className="text-xs text-slate-400">{drawnPaths.length} points drawn</p>
-                )}
               </div>
             )}
-
-            {/* Clear filter button */}
-            {filterMode !== 'none' && (
-              <button
-                onClick={clearFilter}
-                className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-medium"
-              >
-                Clear Filter
-              </button>
-            )}
           </div>
-
-          {/* Current filter status */}
-          {filterMode !== 'none' && (
-            <div className="absolute bottom-4 left-4 z-[1000] p-3 bg-slate-800/95 border border-cyan-500/30 rounded-lg">
-              <p className="text-xs text-cyan-400 font-medium">
-                Active filter: {filterMode === 'latlng' ? `${latInput}, ${lngInput} ± ${radiusKm}km` : 'Polygon region'}
-              </p>
-            </div>
-          )}
         </div>
-
-        {/* Active observation badge */}
-        {activeObservationId && (
-          <div className="absolute bottom-4 right-4 z-[1000] p-3 bg-cyan-600/90 border border-cyan-400/40 rounded-lg shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <Navigation2 className="w-4 h-4 text-white animate-bounce" />
-              <span className="text-xs font-medium text-white">
-                Viewing observation
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Map itself */}
         <div className="h-full w-full rounded-lg overflow-hidden border border-slate-700">
@@ -463,109 +449,119 @@ export default function MapPage({}: MapViewProps) {
             center={[parseFloat(latInput), parseFloat(lngInput)]}
             zoom={13}
             className="h-full w-full"
-            whenCreated={map => { mapRef.current = map; }}
             onClick={e => handleMapClick(e.latlng.lat, e.latlng.lng)}
             onDragEnd={handleMapDragEnd}
             onZoomEnd={handleMapDragEnd}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              attribution=''
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
+            {/* Map ref getter component */}
+            <MapRefGetter mapRef={mapRef} />
+
             {/* Region overlays */}
-            {regions && regions.length > 0 && regions.map(region => (
-              (() => {
-                try {
-                  if (region.geometry_wkt) {
-                    return (
-                      <Popup key={region.id}>
-                        <strong>{region.name}</strong>
-                        <br />
-                        {region.description}
-                      </Popup>
-                    );
-                  }
-                } catch { /* ignore invalid geometry */ }
-                return null;
-              })()
-            ))}
+            {regions && regions.length > 0 && regions.map(region => {
+              let geoLayer;
+              try {
+                if (region.geometry_wkt) {
+                  const geojson = {
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [parseFloat(region.geometry_wkt.match(/[0-9.-]+\s+([0-9.-]+)/)?.[1] || '0'), parseFloat(region.geometry_wkt.match(/([0-9.-]+)\s+[0-9.-]+$/)?.[1] || '0')] },
+                    properties: { name: region.name, description: region.description }
+                  };
+                  const layer = L.geoJSON(geojson, {
+                    pane: 'overlayPane',
+                    pointToLayer: (feature, latlng) =>
+                      L.circleMarker(latlng, {
+                        radius: 8,
+                        fillColor: '#3b82f6',
+                        color: '#ffffff',
+                        weight: 2,
+                        fillOpacity: 1
+                      }).bindPopup('<strong>' + (feature.properties?.name || '') + '</strong><br/>' + (feature.properties?.description || ''))
+                  });
+                  geoLayer = layer;
+                }
+              } catch { /* ignore invalid geometry */ }
+              return geoLayer || null;
+            })}
 
             {/* Drawn polygon */}
-            {(drawnPaths || []).map((path, idx) => (
-              <path element={path} key={`drawn-${idx}`} />
+            {drawnPaths && drawnPaths.length > 0 && drawnPaths.map((poly, idx) => (
+              <Circle
+                key={'drawn-' + idx}
+                pathOptions={{
+                  color: '#06b6d4',
+                  fillColor: '#06b6d4',
+                  fillOpacity: 0.15,
+                  dashArray: '4 4'
+                }}
+                center={poly.getBounds().getCenter()}
+                radius={poly.getBounds().getSouthWest().distanceTo(poly.getBounds().getNorthEast()) / 2}
+              />
             ))}
 
+            {/* Spatial filter circle */}
+            {filterMode === 'latlng' && parseFloat(latInput) && parseFloat(lngInput) && (
+              <Circle
+                center={[parseFloat(latInput), parseFloat(lngInput)]}
+                radius={radiusKm * 1000}
+                pathOptions={{
+                  color: '#8b5cf6',
+                  fillColor: '#8b5cf6',
+                  fillOpacity: 0.1,
+                  dashArray: '4 4'
+                }}
+              />
+            )}
+
             {/* Observation markers - CLICKABLE */}
-            {(observations || []).map(obs => {
-              if (!obs.location_wkt) return null;
+            {observations && observations.length > 0 && observations.map(obs => {
+              if (!obs.location_wkt) {
+                return null;
+              }
               const coords = parseWKT(obs.location_wkt);
-              if (!coords) return null;
+              if (!coords) {
+                return null;
+              }
               const [lng, lat] = coords;
               const color = CLASSIFICATION_COLORS[obs.classification_status] || '#94a3b8';
               const isActive = activeObservationId === obs.id;
               const freqGrad = freqColor(obs.frequency_start, obs.frequency_end);
 
+              const activeLabel = 'Active Marker';
+              const normalLabel = 'Normal Marker';
+
+              const activeHtml = '<div style="position: relative; width: 24px; height: 24px;">' +
+                '<div style="position: absolute; inset: -4px; border-radius: 50%; border: 2px solid ' + color + '; animation: pulse 1.5s ease-in-out infinite; opacity: 0.6;"></div>' +
+                '<div style="position: absolute; inset: 0; border-radius: 50%; background: ' + color + '; box-shadow: 0 0 8px ' + color + ', 0 0 16px ' + color + '40;"></div>' +
+                '<div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;"><div style="width: 8px; height: 8px; border-radius: 50%; background: white;"></div></div>' +
+                '</div><style>@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.5); opacity: 0; } }</style>';
+
+              const normalHtml = '<div style="position: relative; width: 20px; height: 30px;">' +
+                '<div style="position: absolute; top: 0; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: ' + color + '; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.4);"></div>' +
+                '<div style="position: absolute; top: 14px; left: 2px; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 12px solid ' + color + '; opacity: 0.7;"></div>' +
+                '</div>';
+
               const activeIcon = new L.DivIcon({
                 className: '',
-                html: `
-                  <div style="position: relative; width: 24px; height: 24px;">
-                    <div style="
-                      position: absolute; inset: -4px;
-                      border-radius: 50%; border: 2px solid ${color};
-                      animation: pulse 1.5s ease-in-out infinite;
-                      opacity: 0.6;
-                    "></div>
-                    <div style="
-                      position: absolute; inset: 0; border-radius: 50%;
-                      background: ${color};
-                      box-shadow: 0 0 8px ${color}, 0 0 16px ${color}40;
-                    "></div>
-                  </div>
-                  <style>
-                    @keyframes pulse {
-                      0%, 100% { transform: scale(1); opacity: 0.6; }
-                      50% { transform: scale(1.5); opacity: 0; }
-                    }
-                  </style>
-                `,
+                html: isActive ? activeHtml : normalHtml,
                 iconSize: [24, 24],
                 iconAnchor: [12, 12],
               });
 
-              const normalIcon = new L.DivIcon({
-                className: '',
-                html: `
-                  <div style="position: relative; width: 20px; height: 30px;">
-                    <div style="
-                      position: absolute; top: 0; left: 2px;
-                      width: 16px; height: 16px; border-radius: 50%;
-                      background: ${color};
-                      border: 2px solid white;
-                      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-                    "></div>
-                    <div style="
-                      position: absolute; top: 14px; left: 2px;
-                      width: 0; height: 0;
-                      border-left: 6px solid transparent;
-                      border-right: 6px solid transparent;
-                      border-top: 12px solid ${color};
-                      opacity: 0.7;
-                    "></div>
-                  </div>
-                `,
-                iconSize: [20, 30],
-                iconAnchor: [10, 30],
-              });
+              const onClickHandler = function() {
+                flyToObservation(obs);
+              };
 
               return (
                 <Marker
                   key={obs.id}
                   position={coords}
-                  icon={isActive ? activeIcon : normalIcon}
-                  eventHandlers={{
-                    click: () => flyToObservation(obs),
-                  }}
+                  icon={activeIcon}
+                  eventHandlers={{ click: onClickHandler }}
                 >
                   <Popup className="max-w-xs">
                     <div className="p-2">
@@ -577,12 +573,12 @@ export default function MapPage({}: MapViewProps) {
 
                       {/* Observation ID badge */}
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-mono text-slate-500">#{obs.id.slice(0, 8)}</span>
+                        <span className="text-xs font-mono text-slate-500">#{obs.id.toString().slice(0, 8)}</span>
                         <span
                           className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded"
-                          style={{ 
-                            backgroundColor: color + '20', 
-                            color: color 
+                          style={{
+                            backgroundColor: color + '20',
+                            color: color
                           }}
                         >
                           {obs.classification_status}
@@ -601,7 +597,7 @@ export default function MapPage({}: MapViewProps) {
                               className="h-full rounded-full"
                               style={{
                                 width: '100%',
-                                background: `linear-gradient(to right, ${color}, ${color}80)`,
+                                background: 'linear-gradient(to right, ' + color + ', ' + color + '80)',
                               }}
                             />
                           </div>
@@ -622,7 +618,7 @@ export default function MapPage({}: MapViewProps) {
                             <div
                               className="h-full rounded-full"
                               style={{
-                                width: `${Math.min(100, Math.max(0, (obs.signal_strength + 100) / 100 * 100))}%`,
+                                width: (Math.min(100, Math.max(0, (obs.signal_strength + 100) / 100 * 100)) / 100 * 100) + '%',
                                 background: obs.signal_strength > -50 ? '#10b981' : obs.signal_strength > -70 ? '#f59e0b' : '#ef4444',
                               }}
                             />
@@ -644,13 +640,20 @@ export default function MapPage({}: MapViewProps) {
                         <span className="text-[10px] text-slate-400 font-mono">
                           {lat.toFixed(4)}, {lng.toFixed(4)}
                         </span>
-                        <button
-                          onClick={() => flyToObservation(obs)}
-                          className="ml-auto flex items-center gap-1 px-2 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-medium rounded transition-colors"
-                        >
-                          <Navigation2 className="w-3 h-3" />
-                          Fly to
-                        </button>
+                        {
+                          (() => {
+                            const btn = (
+                              <button
+                                onClick={() => flyToObservation(obs)}
+                                className="ml-auto flex items-center gap-1 px-2 py-1 bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-medium rounded transition-colors"
+                              >
+                                <Navigation2 className="w-3 h-3" />
+                                Fly to
+                              </button>
+                            );
+                            return btn;
+                          })()
+                        }
                       </div>
                     </div>
                   </Popup>
@@ -670,7 +673,7 @@ export default function MapPage({}: MapViewProps) {
               type="text"
               value={locateSearch}
               onChange={e => setLocateSearch(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleLocateObservation()}
+              onKeyDown={e => e.key === 'Enter' && handleLocateObservation()}
               placeholder="ID, freq, class, strength..."
               className="flex-1 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-white text-sm"
             />
@@ -687,16 +690,16 @@ export default function MapPage({}: MapViewProps) {
                 locateResults.map(obs => (
                   <button
                     key={obs.id}
-                    className={`w-full text-left p-2 rounded text-sm transition-colors ${
-                      activeObservationId === obs.id 
-                        ? 'bg-cyan-600/30 border border-cyan-500/40' 
+                    className={'w-full text-left p-2 rounded text-sm transition-colors ' + (
+                      activeObservationId === obs.id
+                        ? 'bg-cyan-600/30 border border-cyan-500/40'
                         : 'bg-slate-800 hover:bg-slate-700'
-                    }`}
+                    )}
                     onClick={() => flyToObservation(obs)}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ background: CLASSIFICATION_COLORS[obs.classification_status] || "#94a3b8" }} />
-                      <span className="text-white text-xs truncate">#{obs.id.slice(0, 8)}..</span>
+                      <div className="w-2 h-2 rounded-full" style={{ background: CLASSIFICATION_COLORS[obs.classification_status] || '#94a3b8' }} />
+                      <span className="text-white text-xs truncate">#{obs.id.toString().slice(0, 8)}..</span>
                     </div>
                     <div className="text-xs text-cyan-400 mt-1">
                       {obs.frequency_start.toFixed(1)}-{obs.frequency_end.toFixed(1)} MHz
@@ -714,7 +717,7 @@ export default function MapPage({}: MapViewProps) {
             Map Observations
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            {loading ? 'Loading...' : `${observations.length} observations on map`}
+            {loading ? 'Loading...' : observations.length + ' observations on map'}
           </p>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -736,43 +739,60 @@ export default function MapPage({}: MapViewProps) {
             return (
               <div
                 key={obs.id}
-                className={`p-3 border-b border-slate-800 transition-all cursor-pointer ${
+                className={'p-3 border-b border-slate-800 transition-all cursor-pointer ' + (
                   isActive
                     ? 'bg-cyan-600/20 border-l-4 border-l-cyan-500'
                     : 'hover:bg-slate-800/50'
-                }`}
+                )}
                 onClick={() => flyToObservation(obs)}
               >
-                <div className="flex items-start gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0 mt-1 ring-2 ring-offset-1 ring-offset-slate-900"
-                    style={{ 
-                      background: color,
-                      boxShadow: isActive ? `0 0 8px ${color}, 0 0 16px ${color}40` : `0 0 4px ${color}40`
-                    }}
-                  />
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: color }} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">
-                        #{obs.id.slice(0, 8)}
-                      </p>
-                      {isActive && (
-                        <Navigation2 className="w-3 h-3 text-cyan-400 animate-bounce flex-shrink-0" />
-                      )}
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-white">#{obs.id.toString().slice(0, 8)}</span>
+                      <span
+                        className="px-1 py-0.5 text-[9px] font-bold uppercase rounded"
+                        style={{
+                          backgroundColor: color + '20',
+                          color: color
+                        }}
+                      >
+                        {obs.classification_status}
+                      </span>
                     </div>
-                    <p className="text-xs text-cyan-400 font-mono">
-                      {Math.abs(obs.frequency_start).toFixed(1)}–{Math.abs(obs.frequency_end).toFixed(1)} MHz
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-slate-400">
-                        {obs.modulation_type || 'N/A'} · {Math.abs(obs.signal_strength).toFixed(0)} dBm
-                      </p>
+                    <div className="text-xs text-cyan-400">
+                      {obs.frequency_start.toFixed(1)}&ndash;{obs.frequency_end.toFixed(1)} MHz
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {locCoords 
-                        ? `${Math.abs(locCoords[1]).toFixed(4)}, ${Math.abs(locCoords[0]).toFixed(4)}`
-                        : 'No location'}
-                    </p>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {obs.modulation_type || 'N/A'} &middot; {obs.signal_strength != null ? obs.signal_strength.toFixed(0) : 'N/A'} dBm
+                    </div>
+                    {locCoords && (
+                      <div className="text-xs text-slate-600 mt-1 font-mono">
+                        {locCoords[0].toFixed(4)}, {locCoords[1].toFixed(4)}
+                        {
+                          (() => {
+                            const link = (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  flyToObservation(obs);
+                                }}
+                                className="ml-1 text-cyan-400 hover:text-cyan-300"
+                              >
+                                &nearr;
+                              </button>
+                            );
+                            return link;
+                          })()
+                        }
+                      </div>
+                    )}
+                    {!locCoords && (
+                      <div className="text-xs text-slate-600 mt-1">
+                        No location
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* Classification color bar on list item */}
@@ -787,4 +807,16 @@ export default function MapPage({}: MapViewProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * MapRefGetter: react-leaflet v4 component to capture the map instance
+ * via useMap() hook inside <MapContainer>.
+ */
+function MapRefGetter({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  useEffect(() => {
+    (mapRef as any).current = map;
+  }, [map, mapRef]);
+  return null;
 }
