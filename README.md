@@ -32,17 +32,17 @@ The application follows a modular microservices architecture deployed via Docker
 ┌──────────────────────────────────────────────────────────────┐
 │                    Nginx Proxy                               │
 │                    Port 8080 (host)                          │
-├──────────────────┬───────────────────┬──────────────────────┤
+├──────────────────┬───────────────────┬───────────────────────┤
 │ SPA Routing      │ API Proxy         │ Static Assets         │
 │ (/)              │ (/api/) → backend │ (30d cache)           │
-│ (try_files)      │ (rate limit 30r/s)│                      │
-└──────────────┬───────────────────────┴──────────────────────┘
+│ (try_files)      │ (rate limit 30r/s)│                       │
+└──────────────┬───────────────────────┴───────────────────────┘
                │
-       ┌───────▼────────┐         ┌────────────────────────────┐
-       │   Backend API   │←───────→│   PostGIS 16 Database     │
-       │   FastAPI +     │  5432   │   PostgreSQL + PostGIS    │
-       │   uvicorn       │         │   + custom mappings       │
-       └────────────────┘         └────────────────────────────┘
+       ┌───────▼─────────┐         ┌────────────────────────────┐
+       │   Backend API   │←───────→│   PostGIS 16 Database      │
+       │   FastAPI +     │  5432   │   PostgreSQL + PostGIS     │
+       │   uvicorn       │         │   + custom mappings        │
+       └─────────────────┘         └────────────────────────────┘
 ```
 
 ### Services
