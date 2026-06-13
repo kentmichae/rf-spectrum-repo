@@ -1,0 +1,27 @@
+{
+  "name": "rf-spectrum-repo",
+  "version": "1.0.0",
+  "description": "**RF-SOR** is an enterprise-grade, containerized application designed for field technicians to record, manage, and share RF spectrum observation records and signal characterization metadata in a centralized, secure repository.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kentmichae/rf-spectrum-repo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kentmichae/rf-spectrum-repo/issues"
+  },
+  "homepage": "https://github.com/kentmichae/rf-spectrum-repo#readme",
+  "dependencies": {
+    "puppeteer": "^25.1.0",
+    "puppeteer-core": "^25.1.0"
+  }
+}
