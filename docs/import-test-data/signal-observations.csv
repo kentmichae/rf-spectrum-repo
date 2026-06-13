@@ -1,0 +1,11 @@
+observation_uuid,timestamp,frequency_start,frequency_end,bandwidth,modulation_type,signal_strength,classification_status,notes,equipment_id,technician_id,location_wkt,is_current
+550e8400-e29b-41d4-a716-446655440001,2026-06-13T08:00:00Z,145.200,145.800,0.600,FM,-45.2,UNCLASSIFIED,VHF marine band test,N/A,N/A,77.0369 38.9072,true
+550e8400-e29b-41d4-a716-446655440002,2026-06-13T08:05:00Z,2182.000,2182.000,0.002,SSB,-62.8,CONFIDENTIAL,Mid-frequency maritime chime signal,/dev/equipment/sdr-01,/dev/user/tech-42,-73.9934 34.0522,true
+550e8400-e29b-41d4-a716-446655440003,2026-06-13T08:10:00Z,433.050,434.770,1.720,OFDM,-38.5,UNCLASSIFIED,ISM band WiFi channel scan,N/A,N/A,-118.2437 34.0522,true
+550e8400-e29b-41d4-a716-446655440004,2026-06-13T08:15:00Z,1228.500,1228.500,0.010,PSK,-71.3,CLASSIFIED,Guassian frequency hopping (potential),/dev/equipment/sdr-03,/dev/user/tech-99,-87.6298 41.8781,true
+550e8400-e29b-41d4-a716-446655440005,2026-06-13T08:20:00Z,915.000,928.000,13.000,FSK,-55.1,UNCERTAIN,Industrial, scientific and medical (ISM) band detection,/dev/equipment/tuner-05,N/A,34.0522 -118.2437,true
+550e8400-e29b-41d4-a716-446655440006,2026-06-13T08:25:00Z,440.000,440.500,0.500,FM,-29.7,UNCLASSIFIED,Amateur radio repeater active,/dev/equipment/rx-02,/dev/user/tech-42,38.9072 -77.0369,true
+550e8400-e29b-41d4-a716-446655440007,2026-06-13T08:30:00Z,800.000,850.000,50.000,QAM,-47.6,CONFIDENTIAL,Military band A (800MHz) spectrum activity,/dev/equipment/sdr-01,/dev/user/admin-01,-77.0369 38.9072,false
+550e8400-e29b-41d4-a716-446655440008,2026-06-13T08:35:00Z,1090.000,1090.000,0.001,AM,-90.2,UNCERTAIN,Aviation ADS-B transponder at 1090 MHz,N/A,N/A,40.6413 -73.7781,false
+550e8400-e29b-41d4-a716-446655440009,2026-06-13T08:40:00Z,1575.420,1575.420,0.002,CW,-104.5,UNCLASSIFIED,Global Positioning System (GPS) L1 carrier wave detection,/dev/equipment/gps-dongle-01,N/A,34.0195 -118.4912,true
+550e8400-e29b-41d4-a716-446655440010,2026-06-13T08:45:00Z,2400.000,2483.500,83.500,OFDM,-42.1,UNCLASSIFIED,WiFi 2.4GHz band full-spectrum sweep,/dev/equipment/sdr-02,/dev/user/tech-42,41.8781 -87.6298,true
