@@ -240,7 +240,7 @@ Data import interface for bringing in external RF spectrum data from various sou
 - Real-time stream monitoring
 - Coordinate system conversion
 
-<!-- Import screenshot captured but specific implementation details require application inspection -->
+<[Import Screen](screenshots/import-screen.png)
 
 ---
 
