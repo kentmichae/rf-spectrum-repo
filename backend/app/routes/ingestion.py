@@ -123,7 +123,32 @@ def _build_one(raw: dict) -> Observation:
         raise ValueError(f"Missing required field 'frequency_start' or 'frequency_end'")
 
     mod_str = raw.get("modulation_type")
-    classification = raw.get("classification_status", "UNCERTAIN")
+
+    # Normalize classification_status — accept common synonyms and map to valid DB values
+    raw_class = raw.get("classification_status", None)
+    if raw_class is None:
+        classification = "UNCERTAIN"
+    else:
+        cls = str(raw_class).strip().upper()
+        # Allow both backend-expected values and common synonyms
+        classification_map = {
+            "UNCLASSIFIED": "UNCLASSIFIED",
+            "CONFIDENTIAL": "CONFIDENTIAL",
+            "CLASSIFIED": "CLASSIFIED",
+            "UNCERTAIN": "UNCERTAIN",
+            "VERIFIED": "VERIFIED",
+            "DISCARDED": "DISCARDED",
+        }
+        classification = classification_map.get(cls, str(raw_class))
+
+    # Convert is_current: CSV/JSON may send string "true"/"false"
+    raw_current = raw.get("is_current", None)
+    if raw_current is None:
+        is_current = True
+    elif isinstance(raw_current, bool):
+        is_current = raw_current
+    else:
+        is_current = str(raw_current).strip().lower() in ("true", "1", "yes")
 
     return Observation(
         observation_uuid=uuid.uuid4(),
@@ -139,7 +164,7 @@ def _build_one(raw: dict) -> Observation:
         equipment_id=_parse_id(raw.get("equipment_id")),
         technician_id=_parse_id(raw.get("technician_id")),
         location=loc,
-        is_current=raw.get("is_current", True),
+        is_current=is_current,
     )
 
 

@@ -13,7 +13,7 @@ CREATE TABLE regions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-|-- 2. Users
+-- 2. Users
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-|-- 3. Equipment
+-- 3. Equipment
 CREATE TABLE equipment (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     model TEXT NOT NULL,

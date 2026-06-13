@@ -52,11 +52,14 @@ function clearToken(): void {
 // --- Fetch wrapper ---
 async function fetchApi<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
+  
+  // Don't set Content-Type if the body is FormData — the browser must set it with the multipart boundary
+  const bodyHasFormData = options.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!bodyHasFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
@@ -184,7 +187,7 @@ export const apiIngestion = {
     const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    return fetchApi<IngestionResult>('/ingestion/csv', {
+    return fetchApi<IngestionResult>('/ingestion/upload', {
       method: 'POST',
       headers,
       body: formData,
@@ -197,7 +200,7 @@ export const apiIngestion = {
     const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    return fetchApi<IngestionResult>('/ingestion/json', {
+    return fetchApi<IngestionResult>('/ingestion/upload', {
       method: 'POST',
       headers,
       body: formData,

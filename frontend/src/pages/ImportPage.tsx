@@ -53,11 +53,17 @@ export default function ImportPage() {
     const reader = new FileReader();
     reader.onload = e => {
       const text = e.target?.result as string;
-      if (text.includes(',') || f.name.endsWith('.csv')) {
+      if (f.name.endsWith('.json')) {
+        try {
+          const data = JSON.parse(text);
+          const arr = Array.isArray(data) ? data.length > 0 ? [data[0]] : [] : [];
+          if (arr[0]) setHeaders(Object.keys(arr[0]));
+        } catch {}
+      } else if (text.includes(',') || f.name.endsWith('.csv')) {
         const d = detectDelimiter(text);
         const parts = text.trim().split(d);
         setHeaders(parts.map(p => p.trim()));
-        setPreviewRows([text.trim().split('\n').slice(1, 4).map(r => r.split(d).map(p => p.trim()))]);
+        setPreviewRows([text.trim().split('\\n').slice(1, 4).map(r => r.split(d).map(p => p.trim()))]);
         // Auto-detect columns
         const map: ColumnMap = {};
         parts.forEach((h, i) => {
@@ -70,12 +76,6 @@ export default function ImportPage() {
           else if (/strength|signal|rss|dbm|power/.test(low)) map.signal_strength = i;
         });
         if (Object.keys(map).length > 0) setColumnMap(map);
-      } else if (f.name.endsWith('.json')) {
-        try {
-          const data = JSON.parse(text);
-          const arr = Array.isArray(data) ? data.length > 0 ? [data[0]] : [] : [];
-          if (arr[0]) setHeaders(Object.keys(arr[0]));
-        } catch {}
       }
     };
     reader.readAsText(f);
@@ -86,7 +86,7 @@ export default function ImportPage() {
     setImportState({ status: 'uploading', result: null, errors: [] });
     setLoading(true);
     try {
-      const result = f.name.endsWith('.json')
+      const result = file.name.endsWith('.json')
         ? await apiIngestion.postJson(file)
         : await apiIngestion.postCsv(file);
       setImportState({ status: 'success', result, errors: result.errors });
