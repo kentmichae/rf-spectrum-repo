@@ -5,9 +5,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from geoalchemy2 import WKTElement, shape
+from geoalchemy2 import WKTElement, WKBElement
+from geoalchemy2.shape import to_shape
+import shapely.wkt
 
 from ..database import get_db
+from ..routes.auth import get_current_user_from_request
 from ..schemas import RegionCreate, RegionUpdate, RegionRead
 from ..models import Region, Observation
 
@@ -44,8 +47,16 @@ def get_observations_by_region(
     if not region:
         raise HTTPException(status_code=404, detail="Region not found")
 
-    # Use ST_Intersects to find observations within the polygon
-    wkt_region = WKTElement(region.boundary.wkt, srid=4326)
+    # Convert boundary to WKT safely (handles WKBElement and raw WKT)
+    boundary = region.boundary
+    if isinstance(boundary, WKBElement):
+        shape_obj = to_shape(boundary)
+        boundary_str = shapely.wkt.dumps(shape_obj)
+    elif hasattr(boundary, "wkt"):
+        boundary_str = boundary.wkt
+    else:
+        boundary_str = str(boundary)
+    wkt_region = WKTElement(boundary_str, srid=4326)
     observations = db.query(Observation).filter(
         Observation.location.ST_Intersects(wkt_region)
     ).all()
@@ -102,6 +113,7 @@ def list_regions(db: Session = Depends(get_db)) -> List[RegionRead]:
 def create_region(
     payload: RegionCreate,
     db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
 ) -> RegionRead:
     """Register a new geofence region."""
     boundary = WKTElement(payload.boundary, srid=4326)

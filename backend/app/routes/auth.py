@@ -125,7 +125,7 @@ def get_current_user_from_request(
     return user
 
 
-@router.post("/register", tags=["auth"])
+@router.post("/register", status_code=201, tags=["auth"])
 def register(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
     """Register a new user account.
     

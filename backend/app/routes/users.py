@@ -73,7 +73,16 @@ def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
 ) -> UserRead:
-    """Create a new user."""
+    """Create a new user.
+    Cannot self-assign ADMIN or LEAD roles - those must be granted by an admin.
+    """
+    # Prevent self-assigned privileged roles
+    if payload.role in ("ADMIN", "LEAD"):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot self-assign privileged role. Default role is VIEWER.",
+        )
+
     user = UserModel(
         username=payload.username,
         email=payload.email,

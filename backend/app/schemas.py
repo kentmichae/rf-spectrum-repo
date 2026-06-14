@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # ---- Shared ----
@@ -72,6 +72,7 @@ class EquipmentRead(BaseSchema):
     model: str
     serial_number: str
     firmware_version: Optional[str]
+    status: str
     created_at: datetime
 
 
@@ -90,6 +91,14 @@ class ObservationCreate(BaseModel):
     technician_id: Optional[UUID] = None
     location_wkt: str = Field(..., description="WKT point string, e.g. POINT(lon lat)")
     is_current: bool = Field(default=True)
+
+    @field_validator("frequency_end")
+    @classmethod
+    def validate_freq_end(cls, v, info):
+        if info.data.get("frequency_start") is not None and v is not None:
+            if v <= info.data["frequency_start"]:
+                raise ValueError("frequency_end must be greater than frequency_start")
+        return v
 
 
 class ObservationUpdate(BaseModel):

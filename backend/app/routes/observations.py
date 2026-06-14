@@ -67,8 +67,9 @@ def list_observations(
     """List observations with optional filters.
 
     Supports frequency range filters and spatial point search via lat/lng + radius.
+    Only includes current (non-deleted) observations.
     """
-    query = db.query(Observation)
+    query = db.query(Observation).filter(Observation.is_current == True)
 
     if classification:
         query = query.filter(Observation.classification_status == classification)
@@ -175,7 +176,7 @@ def get_observation(
     return _obs_to_dict(obs)  # type: ignore[return-value]
 
 
-@router.put("/{obs_id}", response_model=ObservationRead, tags=["observations"])
+@router.put("/{obs_id}", status_code=201, response_model=ObservationRead, tags=["observations"])
 def update_observation(
     obs_id: uuid.UUID,
     payload: ObservationUpdate,

@@ -1,6 +1,6 @@
 """Ingestion router - bulk import from JSON/CSV."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import StringIO
 from typing import List, Any
 
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas import ObservationCreate
 from ..models import Observation
+from ..routes.auth import get_current_user_from_request
 
 router = APIRouter()
 
@@ -35,6 +36,7 @@ def upload_observations(
     file: UploadFile = File(...),
     source_name: str = "upload",
     db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
 ) -> dict:
     """Import observations from JSON or CSV file."""
     content = file.file.read()
@@ -128,6 +130,8 @@ def _build_one(raw: dict) -> Observation:
     if freq_start_str is not None and freq_end_str is not None:
         frequency_start = _float("frequency_start")
         frequency_end = _float("frequency_end")
+        if frequency_start is not None and frequency_end is not None and frequency_start >= frequency_end:
+            raise ValueError(f"frequency_start ({frequency_start}) must be less than frequency_end ({frequency_end})")
     else:
         raise ValueError(f"Missing required field 'frequency_start' or 'frequency_end'")
 
@@ -210,7 +214,11 @@ def _parse_csv(content: bytes) -> List[dict]:
 # --- JSON/CSV ingestion endpoints for frontend ---
 
 @router.post("/json", tags=["ingestion"])
-def ingest_json(payload: JSONIngestionPayload, db: Session = Depends(get_db)) -> dict:
+def ingest_json(
+    payload: JSONIngestionPayload,
+    db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
+) -> dict:
     """Bulk ingest observations from a JSON array payload."""
     processed = 0
     errors: List[str] = []
@@ -243,6 +251,10 @@ def ingest_json(payload: JSONIngestionPayload, db: Session = Depends(get_db)) ->
 
 
 @router.post("/csv", tags=["ingestion"])
-def ingest_csv(payload: JSONIngestionPayload, db: Session = Depends(get_db)) -> dict:
+def ingest_csv(
+    payload: JSONIngestionPayload,
+    db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
+) -> dict:
     """Bulk ingest observations treating the JSON array like CSV rows."""
     return ingest_json(payload, db)
