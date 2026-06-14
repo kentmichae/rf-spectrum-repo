@@ -72,6 +72,7 @@ class EquipmentRead(BaseSchema):
     model: str
     serial_number: str
     firmware_version: Optional[str]
+    status: str
     created_at: datetime
 
 

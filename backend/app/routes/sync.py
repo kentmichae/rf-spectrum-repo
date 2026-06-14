@@ -3,7 +3,7 @@ import uuid
 import time
 import logging
 from typing import Any, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -93,11 +93,11 @@ def sync(payload: SyncRequest, db: Session = Depends(get_db)):
             existing.is_current = False
             db.add(new_obs)
 
-            # Audit log
+            # Audit log - use UTC now (SyncDelta has no timestamp field)
             audit = AuditTrail(
                 observation_id=new_obs.id,
                 changed_by=delta.changed_by or payload.client_id,
-                change_timestamp=delta.timestamp or None,
+                change_timestamp=datetime.now(timezone.utc),
                 old_value=None,
                 new_value=delta.changes,
             )
