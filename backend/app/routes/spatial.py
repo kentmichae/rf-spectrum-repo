@@ -10,6 +10,7 @@ from geoalchemy2.shape import to_shape
 import shapely.wkt
 
 from ..database import get_db
+from ..routes.auth import get_current_user_from_request
 from ..schemas import RegionCreate, RegionUpdate, RegionRead
 from ..models import Region, Observation
 
@@ -112,6 +113,7 @@ def list_regions(db: Session = Depends(get_db)) -> List[RegionRead]:
 def create_region(
     payload: RegionCreate,
     db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
 ) -> RegionRead:
     """Register a new geofence region."""
     boundary = WKTElement(payload.boundary, srid=4326)

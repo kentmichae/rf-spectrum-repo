@@ -42,7 +42,7 @@ def get_equipment(
     return equip  # type: ignore[return-value]
 
 
-@router.post("", response_model=EquipmentRead, tags=["equipment"])
+@router.post("", response_model=EquipmentRead, tags=["equipment"], status_code=201)
 def create_equipment(
     payload: EquipmentCreate,
     db: Session = Depends(get_db),
@@ -52,6 +52,7 @@ def create_equipment(
         model=payload.model,
         serial_number=payload.serial_number,
         firmware_version=payload.firmware_version or "",
+        status="ACTIVE",
     )
     db.add(equip)
     db.commit()
