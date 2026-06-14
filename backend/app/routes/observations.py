@@ -26,7 +26,16 @@ def _obs_to_dict(obs: Observation) -> dict:
             loc_wkt = shapely.wkt.dumps(geom)
         except Exception:
             loc_wkt = str(obs.location)
-    
+
+    # Get technician name if available
+    technician_name = None
+    if obs.technician_id:
+        tech = getattr(obs, 'technician', None)
+        if tech and hasattr(tech, 'username'):
+            technician_name = tech.username
+        elif hasattr(obs, '_technician_username'):
+            technician_name = getattr(obs, '_technician_username', None)
+
     return {
         "id": obs.id,
         "observation_uuid": obs.observation_uuid,
@@ -41,6 +50,7 @@ def _obs_to_dict(obs: Observation) -> dict:
         "notes": obs.notes,
         "equipment_id": obs.equipment_id,
         "technician_id": obs.technician_id,
+        "technician_name": technician_name,
         "location_wkt": loc_wkt,
         "is_current": obs.is_current,
         "created_at": obs.created_at,
