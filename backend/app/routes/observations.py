@@ -27,14 +27,12 @@ def _obs_to_dict(obs: Observation) -> dict:
         except Exception:
             loc_wkt = str(obs.location)
 
-    # Get technician name if available
+    # Get technician name
     technician_name = None
     if obs.technician_id:
-        tech = getattr(obs, 'technician', None)
-        if tech and hasattr(tech, 'username'):
-            technician_name = tech.username
-        elif hasattr(obs, '_technician_username'):
-            technician_name = getattr(obs, '_technician_username', None)
+        tech = getattr(obs, '_technician_username', None) or getattr(getattr(obs, 'technician', None), 'username', None)
+        if tech:
+            technician_name = tech
 
     return {
         "id": obs.id,
