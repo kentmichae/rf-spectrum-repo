@@ -51,35 +51,52 @@ export default function ImportPage() {
   const handleFile = useCallback((f: File) => {
     setFile(f);
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
-      if (f.name.endsWith('.json')) {
+      if (!text) return;
+
+      if (f.name.toLowerCase().endsWith('.json')) {
         try {
           const data = JSON.parse(text);
           const arr = Array.isArray(data) ? data.length > 0 ? [data[0]] : [] : [];
-          if (arr[0]) setHeaders(Object.keys(arr[0]));
-        } catch {}
-      } else if (text.includes(',') || f.name.endsWith('.csv')) {
+          if (arr[0]) {
+            setHeaders(Object.keys(arr[0]));
+            setPreviewRows(arr.slice(0, 3));
+          }
+        } catch {
+          setHeaders(['error']);
+        }
+      } else {
         const d = detectDelimiter(text);
-        const parts = text.trim().split(d);
-        setHeaders(parts.map(p => p.trim()));
-        setPreviewRows([text.trim().split('\\n').slice(1, 4).map(r => r.split(d).map(p => p.trim()))]);
+        const rawParts = text.trim().split('\n')[0].split(d);
+        const parsedHeaders = rawParts.map((p) => p.trim());
+        setHeaders(parsedHeaders);
+        setPreviewRows(
+          text.trim().split('\n').slice(1, 4).map((r) =>
+            r.split(d).map((p) => p.trim())
+          )
+        );
         // Auto-detect columns
         const map: ColumnMap = {};
-        parts.forEach((h, i) => {
+        for (let i = 0; i < parsedHeaders.length; i++) {
+          const h = parsedHeaders[i];
           const low = h.toLowerCase();
           if (/freq_start|fstart|start_freq/.test(low)) map.frequency_start = i;
           else if (/freq_end|fend|end_freq/.test(low)) map.frequency_end = i;
-          else if (/time|date|timestamp/.test(low)) map.timestamp = i;
-          else if (/modulation|mod_type|mod_type/.test(low)) map.modulation_type = i;
-          else if (/bandwidth|bandwidth/.test(low)) map.bandwidth = i;
-          else if (/strength|signal|rss|dbm|power/.test(low)) map.signal_strength = i;
-        });
+          else if (/time|date|timestamp|dt|date_time/.test(low)) map.timestamp = i;
+          else if (/modulation|mod_type|modulation_type/.test(low)) map.modulation_type = i;
+          else if (/bandwidth|band|bw/.test(low)) map.bandwidth = i;
+          else if (/strength|signal|rss|dbm|power|db_power/.test(low)) map.signal_strength = i;
+          else if (/classification|class_status|classif|status/.test(low)) map.classification_status = i;
+          else if (/lat|latitude|y_coord/.test(low)) map.location_lat = i;
+          else if (/lon|longitude|x_coord|lng|longi/.test(low)) map.location_lon = i;
+          else if (/location_wkt|wkt|point|loc_wkt/.test(low)) map.location_wkt = i;
+        }
         if (Object.keys(map).length > 0) setColumnMap(map);
       }
     };
     reader.readAsText(f);
-  }, []);
+  }, [file]);
 
   const handleSubmit = useCallback(async () => {
     if (!file) return;
@@ -100,7 +117,7 @@ export default function ImportPage() {
 
   const reset = () => {
     setFile(null);
-    setHeader([]);
+    setHeaders([]);
     setPreviewRows([]);
     setColumnMap(null);
     setShowColumns(false);
@@ -186,7 +203,7 @@ export default function ImportPage() {
               accept=".csv,.json,application/json"
               className="hidden"
               id="file-upload"
-              onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
+              onChange={e => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]); }}
             />
             <label htmlFor="file-upload" className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2 rounded-md text-sm font-medium cursor-pointer inline-block">
               Select File

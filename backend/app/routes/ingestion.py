@@ -98,21 +98,30 @@ def _build_one(raw: dict) -> Observation:
     if ts is not None:
         ts = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
 
-    # Must have at least location_wkt and frequencies
+    # Build location from WKT or lat/lon fallback
     loc_wkt = raw.get("location_wkt")
-    if not loc_wkt:
-        raise ValueError(f"Missing required field 'location_wkt'")
+    loc_lat_str = raw.get("location_lat")
+    loc_lon_str = raw.get("location_lon")
 
-    # Normalize the WKT input - strip POINT() if already wrapped
-    loc_raw = loc_wkt.strip()
-    if loc_raw.upper().startswith("POINT("):
-        # Input is already POINT(lng lat) format
-        coords = loc_raw[6:-1].split()
-        loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
+    if loc_wkt:
+        # Normalize the WKT input - strip POINT() if already wrapped
+        loc_raw = loc_wkt.strip()
+        if loc_raw.upper().startswith("POINT("):
+            coords = loc_raw[6:-1].split()
+            loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
+        else:
+            coords = loc_raw.split()
+            loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
+    elif loc_lat_str is not None and loc_lon_str is not None:
+        # Fallback: accept location_lat/location_lon columns (frontend auto-detects these)
+        try:
+            lat = float(loc_lat_str)
+            lon = float(loc_lon_str)
+            loc = WKTElement(f"POINT({lon} {lat})", srid=4326)
+        except (TypeError, ValueError):
+            raise ValueError("location_lat/location_lat values must be numeric")
     else:
-        # Input is just coordinates like "-77.0 38.9"
-        coords = loc_raw.split()
-        loc = WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326)
+        raise ValueError("Missing required field 'location_wkt' or 'location_lat' + 'location_lon'")
 
     freq_start_str = raw.get("frequency_start")
     freq_end_str = raw.get("frequency_end")
@@ -130,16 +139,20 @@ def _build_one(raw: dict) -> Observation:
         classification = "UNCERTAIN"
     else:
         cls = str(raw_class).strip().upper()
-        # Allow both backend-expected values and common synonyms
+        # Map user-facing classification labels to valid enum values
+        # Maps: input → enum value (defaults to UNCERTAIN if unrecognized)
         classification_map = {
-            "UNCLASSIFIED": "UNCLASSIFIED",
-            "CONFIDENTIAL": "CONFIDENTIAL",
-            "CLASSIFIED": "CLASSIFIED",
             "UNCERTAIN": "UNCERTAIN",
+            "UNCLEARIFIED": "UNCERTAIN",
+            "UNVERIFIED": "UNCERTAIN",
             "VERIFIED": "VERIFIED",
+            "CONFIRMED": "VERIFIED",
             "DISCARDED": "DISCARDED",
+            "REJECTED": "DISCARDED",
+            "FALSE_POSITIVE": "DISCARDED",
+            "FP": "DISCARDED",
         }
-        classification = classification_map.get(cls, str(raw_class))
+        classification = classification_map.get(cls, "UNCERTAIN")
 
     # Convert is_current: CSV/JSON may send string "true"/"false"
     raw_current = raw.get("is_current", None)
