@@ -170,7 +170,7 @@ def _build_one(raw: dict) -> Observation:
     return Observation(
         observation_uuid=uuid.uuid4(),
         version=1,
-        timestamp=ts or datetime.utcnow(),
+        timestamp=ts or datetime.now(timezone.utc),
         frequency_start=frequency_start or 0.0,
         frequency_end=frequency_end or 0.0,
         bandwidth=_float("bandwidth"),

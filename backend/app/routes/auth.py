@@ -52,11 +52,15 @@ def _record_login_attempt(username: str) -> None:
 
 
 def _verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    # bcrypt has a hard 72-byte limit; truncate silently
+    truncated = plain_password.encode("utf-8")[:72]
+    return bcrypt.checkpw(truncated, hashed_password.encode("utf-8"))
 
 
 def _hash_password(plain_password: str) -> str:
-    return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    # bcrypt has a hard 72-byte limit; truncate silently
+    truncated = plain_password.encode("utf-8")[:72]
+    return bcrypt.hashpw(truncated, bcrypt.gensalt()).decode("utf-8")
 
 
 @router.post("/login", tags=["auth"])
