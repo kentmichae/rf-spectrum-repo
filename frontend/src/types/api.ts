@@ -72,11 +72,11 @@ export interface ObservationQueryParams {
 
 // --- User types ---
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   role: string;
-  active: boolean;
+  region_id: string | null;
   created_at: string;
 }
 
@@ -84,7 +84,7 @@ export interface UserCreatePayload {
   username: string;
   email: string;
   password: string;
-  role: 'ADMIN' | 'OPERATOR' | 'VIEWER';
+  role: 'VIEWER' | 'TECHNICIAN' | 'LEAD' | 'ADMIN';
 }
 
 // --- Equipment types ---
