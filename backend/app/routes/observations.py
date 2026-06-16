@@ -106,7 +106,7 @@ def list_observations(
     return [_obs_to_dict(o) for o in results]  # type: ignore[return-value]
 
 
-@router.post("", response_model=ObservationRead, tags=["observations"])
+@router.post("", status_code=201, response_model=ObservationRead, tags=["observations"])
 def create_observation(
     payload: ObservationCreate,
     db: Session = Depends(get_db),

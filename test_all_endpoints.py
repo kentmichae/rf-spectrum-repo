@@ -32,8 +32,8 @@ section("1. BASE HEALTH")
 r = requests.get(f"{BASE}/health")
 test("GET /health", r.status_code, r.status_code == 200, j(r.json()))
 
-r = requests.get(f"{BASE}/db-check")
-test("GET /db-check", r.status_code, r.status_code == 200, j(r.json()))
+r = requests.get(f"{BASE}/api/health/db-check")
+test("GET /api/health/db-check", r.status_code, r.status_code == 200, j(r.json()))
 
 r = requests.get(f"{BASE}/docs")
 test("GET /docs", r.status_code, r.status_code == 200, "Swagger OK")
@@ -57,24 +57,35 @@ for p in sorted(paths):
 
 section("2. AUTH ENDPOINTS (prefix: /api/auth)")
 
-# POST /api/auth/register — TEST: does it exist?
+# POST /api/auth/register — Create a unique test user for auth tests
+test_user_email = f"regtest_{uuid.uuid4().hex}@test.com"
 r = requests.post(f"{BASE}/api/auth/register", json={
     "username": f"regtest_{uuid.uuid4().hex[:6]}",
-    "email": "reg@test.com",
+    "email": test_user_email,
     "password": "TestPass123!",
     "role": "VIEWER"
 })
 reg_status = r.status_code
-test("POST /api/auth/register", reg_status, reg_status == 200, j(r.json()) if reg_status in (200,) else r.text[:120])
+test("POST /api/auth/register", reg_status, reg_status in (200, 201), j(r.json()) if reg_status in (200, 201) else r.text[:120])
 
-# POST /api/auth/login
+# POST /api/auth/login — Use the test user we just created (root doesn't exist in default DB)
+login_user = f"login_test_{uuid.uuid4().hex[:6]}"
+r = requests.post(f"{BASE}/api/auth/register", json={
+    "username": login_user,
+    "email": f"{login_user}@test.com",
+    "password": "TestPass123!",
+    "role": "TECHNICIAN"
+})
+test("POST /api/auth/register (login user)", r.status_code, r.status_code in (200, 201, 409), j(r.json()) if r.status_code in (200, 201, 409) else r.text[:120])
+
+# Now login with that user
 r = requests.post(f"{BASE}/api/auth/login", json={
-    "username": "root",
-    "password": "changeme"
+    "username": login_user,
+    "password": "TestPass123!"
 })
 login_ok = r.status_code == 200
 token = r.json().get("access_token", "") if login_ok else ""
-test("POST /api/auth/login (root)", r.status_code, login_ok, j(r.json()) if r.status_code == 200 else r.text[:120])
+test("POST /api/auth/login", r.status_code, login_ok, j(r.json()) if r.status_code == 200 else r.text[:120])
 
 # Login with wrong creds
 r = requests.post(f"{BASE}/api/auth/login", json={

@@ -181,3 +181,13 @@ def get_roles():
             "ADMIN": ["read", "write", "verify_classify", "manage_all"],
         }
     }
+
+
+@router.post("/logout", tags=["auth"])
+def logout():
+    """Logout endpoint - JWT is stateless, so client simply discards token.
+    
+    This endpoint exists for API contract completeness. In a stateless JWT
+    system, logout is handled client-side by removing the token from storage.
+    """
+    return {"status": "logged_out", "message": "Token invalidation is handled client-side. Discard your JWT token."}

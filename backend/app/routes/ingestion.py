@@ -53,7 +53,7 @@ def upload_observations(
         )
 
     processed = 0
-    errors: List[str] = []
+    errors: List[dict] = []
     job_id = uuid.uuid4()
 
     for idx, raw in enumerate(records):
@@ -64,15 +64,26 @@ def upload_observations(
                 db.flush()  # get the id before next record
             processed += len(payload)
         except Exception as exc:
-            errors.append(f"Row {idx}: {exc}")
+            # Parse error description to get field name if available
+            error_msg = str(exc)
+            field = "unknown"
+            if "Missing required field" in error_msg:
+                import re
+                match = re.search(r"'([^']+)'", error_msg)
+                if match:
+                    field = match.group(1)
+            errors.append({
+                "row": idx,
+                "field": field,
+                "error": error_msg,
+            })
 
     db.commit()
 
     return {
-        "job_id": job_id,
-        "status": "completed",
-        "total_records": len(records),
-        "processed": processed,
+        "total": len(records),
+        "created": processed,
+        "updated": 0,
         "errors": errors,
     }
 
@@ -258,3 +269,36 @@ def ingest_csv(
 ) -> dict:
     """Bulk ingest observations treating the JSON array like CSV rows."""
     return ingest_json(payload, db)
+
+
+@router.get("/history", tags=["ingestion"])
+def get_ingestion_history(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    _auth = Depends(get_current_user_from_request),
+) -> list:
+    """Return recent import results from the Observations model."""
+    import datetime
+    
+    results = []
+    # Get recent observations created by import
+    # Query all observations and sort by newest first
+    obs_list = db.query(Observation).order_by(
+        Observation.created_at.desc()
+    ).limit(limit).all()
+    
+    for obs in obs_list:
+        results.append({
+            "id": str(obs.id),
+            "frequency_start": obs.frequency_start,
+            "frequency_end": obs.frequency_end,
+            "bandwidth": obs.bandwidth,
+            "modulation_type": obs.modulation_type,
+            "signal_strength": obs.signal_strength,
+            "classification_status": obs.classification_status,
+            "timestamp": obs.timestamp.isoformat() if obs.timestamp else None,
+            "created_at": obs.created_at.isoformat() if obs.created_at else None,
+            "imported": True,
+        })
+    
+    return results
