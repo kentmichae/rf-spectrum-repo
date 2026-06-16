@@ -42,14 +42,23 @@ def upload_observations(
     content = file.file.read()
     filename = file.filename or ""
 
-    if filename.endswith(".json"):
-        records = _parse_json(content)
-    elif filename.endswith(".csv"):
+    if not content or content == b'':
+        raise HTTPException(
+            status_code=400,
+            detail="Empty file received. Content was not forwarded."
+        )
+
+    if filename.endswith(".json") and len(content) > 5:
+        try:
+            records = _parse_json(content)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    elif filename.endswith(".csv") and len(content) > 5:
         records = _parse_csv(content)
     else:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type: use .json or .csv"
+            detail="Unsupported or empty file: use valid .json or .csv"
         )
 
     processed = 0
@@ -178,10 +187,12 @@ def _build_one(raw: dict) -> Observation:
     else:
         is_current = str(raw_current).strip().lower() in ("true", "1", "yes")
 
+    ts_final = ts or datetime.now(timezone.utc)
+
     return Observation(
         observation_uuid=uuid.uuid4(),
         version=1,
-        timestamp=ts or datetime.utcnow(),
+        timestamp=ts_final,
         frequency_start=frequency_start or 0.0,
         frequency_end=frequency_end or 0.0,
         bandwidth=_float("bandwidth"),
@@ -208,9 +219,22 @@ def _parse_id(val: Any):
 
 
 def _parse_json(content: bytes) -> List[dict]:
-    """Parse JSON array content."""
+    """Parse JSON array content, tolerating leading # comment lines (JSONC)."""
     import json
-    data = json.loads(content)
+    stripped = content.strip()
+    if not stripped:
+        raise ValueError("Empty JSON content — the uploaded file appears to be empty or whitespace-only")
+    # Strip leading comment lines and blank lines so that JSONC files with
+    # header comments (e.g. "# Sample data") parse cleanly as standard JSON.
+    text = stripped.decode("utf-8", errors="replace")
+    lines = (line for line in text.splitlines() if line.strip() and not line.strip().startswith("#"))
+    clean_text = "\n".join(lines)
+    if not clean_text.strip():
+        raise ValueError("Empty JSON content after stripping comments — the file contains only comments or blank lines")
+    try:
+        data = json.loads(clean_text.encode("utf-8").strip())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON: {exc}") from None
     return data if isinstance(data, list) else [data]
 
 

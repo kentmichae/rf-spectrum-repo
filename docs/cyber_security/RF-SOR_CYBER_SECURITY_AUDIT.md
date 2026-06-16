@@ -1,7 +1,7 @@
 # Cyber Security Audit Report: RF Spectrum Observation Repository (RF-SOR)
 
 **Project:** rf-spectrum-repo
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Audit Date:** 2026-06-13
 **Auditor:** Automated Static Analysis
 **Classification:** CONFIDENTIAL

@@ -101,6 +101,18 @@ export default function ImportPage() {
     reader.readAsText(f);
   }, [file]);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await apiIngestion.getHistory();
+      setHistory(data || []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     if (!file) return;
     setImportState({ status: 'uploading', result: null, errors: [] });
@@ -128,18 +140,6 @@ export default function ImportPage() {
     setImportState({ status: 'idle', result: null, errors: [] });
     setShowErrors(false);
   };
-
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const data = await apiIngestion.getHistory();
-      setHistory(data || []);
-    } catch {
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     loadHistory();
@@ -171,7 +171,7 @@ export default function ImportPage() {
         onClick={handleAreaClick}
         onDragOver={e => { e.preventDefault(); setDragActive(true); }}
         onDragLeave={() => setDragActive(false)}
-        onDrop={e => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }}
+        onDrop={e => { e.preventDefault(), setDragActive(false), e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]) }}
       >
         <Upload className={`w-12 h-12 mx-auto mb-4 ${dragActive ? 'text-cyan-400' : 'text-slate-500'}`} />
         {file ? (
@@ -247,10 +247,14 @@ export default function ImportPage() {
                 <CheckCircle className="w-6 h-6 text-emerald-400" />
                 <div>
                   <h3 className="text-lg font-semibold text-emerald-400">Import Successful</h3>
-                  <p className="text-sm text-slate-400">{importState.result.created} created, {importState.result.updated} updated, {importState.result.total} total</p>
+                  {importState.result.created !== undefined && importState.result.updated !== undefined ? (
+                    <p className="text-sm text-slate-400">{importState.result.created} created, {importState.result.updated} updated, {importState.result.total} total</p>
+                  ) : (
+                    <p className="text-sm text-slate-400">Import complete</p>
+                  )}
                 </div>
               </div>
-              {importState.result.errors.length > 0 && (
+              {importState.result.errors && importState.result.errors.length > 0 && (
                 <div className="border-t border-emerald-500/30 pt-4">
                   <button onClick={() => setShowErrors(!showErrors)} className="flex items-center gap-2 text-sm text-orange-400 hover:text-orange-300">
                     {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -262,7 +266,7 @@ export default function ImportPage() {
                         <div key={idx} className="flex items-start gap-2 text-sm text-orange-300 bg-orange-500/10 rounded p-3 border border-orange-500/20">
                           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                           <div>
-                            <span className="font-mono">Row {err.row + 1}, field "{err.field}":</span> {err.error}
+                            <span className="font-mono">Row {err.row + 1}, field &quot;{err.field}&quot;:</span> {err.error}
                           </div>
                         </div>
                       ))}
@@ -270,6 +274,17 @@ export default function ImportPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {importState.status === 'error' && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-red-400" />
+                <div>
+                  <h3 className="text-lg font-semibold text-red-400">Import Failed</h3>
+                  <p className="text-sm text-slate-400">{importState.errors[0]?.error || 'Upload failed'}</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -282,7 +297,7 @@ export default function ImportPage() {
         </div>
         {historyLoading ? (
           <div className="text-slate-500 text-sm flex items-center gap-2">
-            <RotateCw className="w-4 h-4 inline animate-spin" />
+            <Clock className="w-4 h-4 inline animate-spin" />
             Loading...
           </div>
         ) : history.length === 0 ? (
