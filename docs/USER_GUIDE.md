@@ -54,7 +54,7 @@ The sidebar navigation dynamically shows/hides menu items based on your assigned
 
 The application uses a vertical sidebar layout on the left side:
 
-- **Brand Area:** RF-SOR logo and version number (v0.3.0)
+- **Brand Area:** RF-SOR logo and version number (v0.4.0)
 - **Collapse/Expand Button:** Click the left-facing triangle to collapse the sidebar to icon-only mode
 - **Navigation Items:** Dynamic based on user role (see role matrix above)
 - **User Info:** Current user's username and role shown with avatar
