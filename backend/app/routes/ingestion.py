@@ -197,9 +197,14 @@ def _parse_id(val: Any):
 
 
 def _parse_json(content: bytes) -> List[dict]:
-    """Parse JSON array content."""
+    """Parse JSON array content, tolerating leading JSONC comment lines."""
     import json
-    data = json.loads(content)
+    text = content.decode("utf-8")
+    # Strip leading comment lines (JSONC support)
+    text = "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+    data = json.loads(text)
     return data if isinstance(data, list) else [data]
 
 
