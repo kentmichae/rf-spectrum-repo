@@ -261,37 +261,43 @@ export default function MapPage({}: MapViewProps) {
   const pointCount = parsedCoords.length;
   const hasValidPolygon = pointCount >= 3;
 
-  // Polygon overlay — fixed: render via useEffect instead of render-time condition
-  const appliedPolygonRef = useRef<L.Layer | null>(null);
-  const map = useMap();
-  useEffect(() => {
-    if (!polygonGeoJSON || !map) return;
-    if (appliedPolygonRef.current) {
-      map.removeLayer(appliedPolygonRef.current);
-      appliedPolygonRef.current = null;
-    }
-    try {
-      const geojson = JSON.parse(polygonGeoJSON);
-      appliedPolygonRef.current = L.geoJSON(geojson, {
-        style: { color: '#3b82f6', weight: 2, fillOpacity: 0.15 },
-      }).addTo(map);
-    } catch { /* invalid JSON, ignore */ }
-  }, [polygonGeoJSON, map]);
+  // MapLayers component — rendered INSIDE MapContainer so useMap() is valid
+  const MapLayers = () => {
+    const map = useMap();
+    const appliedPolygonRef = useRef<L.Layer | null>(null);
 
-  // Live polygon preview while drawing (for 2+ points)
-  const livePolygonLayer = useRef<L.Polygon | null>(null);
-  useEffect(() => {
-    if (livePolygonLayer.current && map) {
-      map.removeLayer(livePolygonLayer.current);
-    }
-    livePolygonLayer.current = null;
-    if (polygonGeoJSON || parsedCoords.length < 2) return;
-    if (filterMode === 'polygon') {
-      livePolygonLayer.current = L.polygon(parsedCoords, {
-        color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.12, dashArray: '4 4'
-      }).addTo(map);
-    }
-  }, [parsedCoords, polygonGeoJSON, filterMode]);
+    // Applied polygon overlay
+    useEffect(() => {
+      if (!polygonGeoJSON || !map) return;
+      if (appliedPolygonRef.current) {
+        map.removeLayer(appliedPolygonRef.current);
+        appliedPolygonRef.current = null;
+      }
+      try {
+        const geojson = JSON.parse(polygonGeoJSON);
+        appliedPolygonRef.current = L.geoJSON(geojson, {
+          style: { color: '#3b82f6', weight: 2, fillOpacity: 0.15 },
+        }).addTo(map);
+      } catch { /* invalid JSON, ignore */ }
+    }, [polygonGeoJSON, map]);
+
+    // Live polygon preview while drawing (for 2+ points)
+    const livePolygonLayer = useRef<L.Polygon | null>(null);
+    useEffect(() => {
+      if (livePolygonLayer.current && map) {
+        map.removeLayer(livePolygonLayer.current);
+      }
+      livePolygonLayer.current = null;
+      if (polygonGeoJSON || parsedCoords.length < 2) return;
+      if (filterMode === 'polygon') {
+        livePolygonLayer.current = L.polygon(parsedCoords, {
+          color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.12, dashArray: '4 4'
+        }).addTo(map);
+      }
+    }, [parsedCoords, polygonGeoJSON, filterMode, map]);
+
+    return null;
+  };
 
   const handlePolygonApply = () => {
     if (!coordsInput.trim()) return;
@@ -478,6 +484,9 @@ export default function MapPage({}: MapViewProps) {
 
             {/* Map ref getter component */}
             <MapRefGetter mapRef={mapRef} />
+
+            {/* Polygon overlays — rendered inside MapContainer for useMap() */}
+            <MapLayers />
 
             {/* Region overlays */}
             {regions && regions.length > 0 && regions.map(region => {
