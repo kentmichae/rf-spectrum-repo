@@ -239,57 +239,69 @@ export default function MapPage({}: MapViewProps) {
   // Add clicked point to polygon
   const handleMapClick = (lat: number, lng: number) => {
     if (filterMode !== 'polygon') return;
-    const newCoords = coordsInput ? coordsInput + ', ' + lat + ', ' + lng : lat + ', ' + lng;
+    // Each coordinate pair on its own line: "lat, lng"
+    const newCoords = coordsInput ? coordsInput + '\n' + lat + ', ' + lng : lat + ', ' + lng;
     setCoordsInput(newCoords);
-
-    // Add marker
-    const coords = coordsInput
-      ? coordsInput.split(',').map((s: string) => s.trim().split(/\s+/)).flat().map(Number)
-      : [lat, lng];
-
-    // For now, add to the drawn polygon
-    let latlngs: any[];
-    if (coordsInput) {
-      latlngs = coordsInput.split('\n').map((s: string) => {
-        const parts = s.trim().split(',').map(Number);
-        if (!isNaN(parts[0]) && !isNaN(parts[1])) {
-          return [parts[0], parts[1]] as [number, number];
-        }
-        return null;
-      }).filter((c: any) => c != null);
-    } else {
-      latlngs = [[lat, lng]];
-    }
-    const polygon = L.polygon(
-      latlngs,
-      { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.15, dashArray: '4 4' }
-    );
-    setDrawnPaths(prev => [...prev, polygon]);
   };
 
-  // Render polygon overlay from GeoJSON
-  const renderPolygonOverlay = () => {
-    if (!polygonGeoJSON) return null;
+  // Parse coords for point count and validation
+  const parsedCoords = coordsInput.trim()
+    ? coordsInput.trim().split('\n')
+        .filter(s => s.trim())
+        .map((s: string) => {
+          const parts = s.trim().split(/\s*,\s*/).map(Number);
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            return [parts[0], parts[1]] as [number, number];
+          }
+          return null;
+        })
+        .filter((c: any): c is [number, number] => c !== null)
+    : [];
+
+  const pointCount = parsedCoords.length;
+  const hasValidPolygon = pointCount >= 3;
+
+  // Polygon overlay — fixed: render via useEffect instead of render-time condition
+  const appliedPolygonRef = useRef<L.Layer | null>(null);
+  const map = useMap();
+  useEffect(() => {
+    if (!polygonGeoJSON || !map) return;
+    if (appliedPolygonRef.current) {
+      map.removeLayer(appliedPolygonRef.current);
+      appliedPolygonRef.current = null;
+    }
     try {
       const geojson = JSON.parse(polygonGeoJSON);
-      const layer = L.geoJSON(geojson, {
-        style: { color: '#3b82f6', weight: 2, fillOpacity: 0.1 },
-      });
-      return layer;
-    } catch {
-      return null;
+      appliedPolygonRef.current = L.geoJSON(geojson, {
+        style: { color: '#3b82f6', weight: 2, fillOpacity: 0.15 },
+      }).addTo(map);
+    } catch { /* invalid JSON, ignore */ }
+  }, [polygonGeoJSON, map]);
+
+  // Live polygon preview while drawing (for 2+ points)
+  const livePolygonLayer = useRef<L.Polygon | null>(null);
+  useEffect(() => {
+    if (livePolygonLayer.current && map) {
+      map.removeLayer(livePolygonLayer.current);
     }
-  };
+    livePolygonLayer.current = null;
+    if (polygonGeoJSON || parsedCoords.length < 2) return;
+    if (filterMode === 'polygon') {
+      livePolygonLayer.current = L.polygon(parsedCoords, {
+        color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.12, dashArray: '4 4'
+      }).addTo(map);
+    }
+  }, [parsedCoords, polygonGeoJSON, filterMode]);
 
   const handlePolygonApply = () => {
     if (!coordsInput.trim()) return;
     const coords = coordsInput.trim().split('\n').map((s: string) => {
-      const parts = s.trim().split(',').map(Number);
-      if (parts.length === 2) {
+      const parts = s.trim().split(/\s*,\s*/).map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
         return [parts[0], parts[1]] as [number, number];
       }
       return null;
-    }).filter((c: any) => c != null);
+    }).filter((c: any): c is [number, number] => c !== null);
 
     if (coords.length >= 3) {
       const geojson = {
@@ -410,7 +422,12 @@ export default function MapPage({}: MapViewProps) {
             {/* Polygon drawing form */}
             {filterMode === 'polygon' && (
               <div className="p-3 bg-slate-800/95 border border-slate-700 rounded-lg space-y-2">
-                <h3 className="text-sm font-semibold text-white">Draw Polygon Filter</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-white">Draw Polygon Filter</h3>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${hasValidPolygon ? 'bg-green-600/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                    {pointCount}/3 points
+                  </span>
+                </div>
                 <p className="text-xs text-slate-400">Click on the map to draw a polygon. Observations inside will be displayed.</p>
                 <textarea
                   value={coordsInput}
@@ -421,10 +438,11 @@ export default function MapPage({}: MapViewProps) {
                 <div className="flex gap-2">
                   <button
                     onClick={handlePolygonApply}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-xs font-medium"
+                    disabled={!hasValidPolygon}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 text-white rounded text-xs font-medium ${hasValidPolygon ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-slate-600 cursor-not-allowed'}`}
                   >
                     <Filter className="w-3 h-3" />
-                    Apply Polygon
+                    Apply Polygon ({pointCount}/3)
                   </button>
                   <button
                     onClick={() => {
