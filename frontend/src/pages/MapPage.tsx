@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as L from 'leaflet';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiObservations, apiRegions } from '../lib/api-client';
 import type { Observation, Region, ObservationQueryParams } from '../types/api';
@@ -174,7 +174,43 @@ export default function MapPage({}: MapViewProps) {
       setCoordsInput('');
       setPolygonGeoJSON(null);
       setQueryParams({});
+    } else {
+      setDrawnPaths([]);
+      setCoordsInput('');
+      setPolygonGeoJSON(null);
+      setQueryParams({});
     }
+  };
+
+  // Leaflet click event listener — uses mousedown to bypass Leaflet's drag tolerance
+  const MapClickHandler = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (filterMode !== 'polygon') return;
+      const onMapMouseDown = (e: L.LeafletMouseEvent) => {
+        // Prevent the mousedown from triggering map drag at all
+        e.originalEvent.stopPropagation();
+        handleMapClick(e.latlng.lat, e.latlng.lng);
+      };
+      map.on('mousedown', onMapMouseDown);
+      return () => {
+        map.off('mousedown', onMapMouseDown);
+      };
+    }, [map, filterMode, handleMapClick]);
+    return null;
+  };
+
+  // Map drag state — disable dragging when in polygon mode
+  const MapDragController = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (filterMode === 'polygon') {
+        map.dragging.disable();
+      } else {
+        map.dragging.enable();
+      }
+    }, [map, filterMode]);
+    return null;
   };
 
   // Locate observations: search and zoom to observation
@@ -242,6 +278,10 @@ export default function MapPage({}: MapViewProps) {
     // Each coordinate pair on its own line: "lat, lng"
     const newCoords = coordsInput ? coordsInput + '\n' + lat + ', ' + lng : lat + ', ' + lng;
     setCoordsInput(newCoords);
+    // Fly map center to the clicked point so user can see where they're drawing
+    if (mapRef.current) {
+      mapRef.current.panTo([lat, lng], { duration: 0.3 });
+    }
   };
 
   // Parse coords for point count and validation
@@ -472,8 +512,7 @@ export default function MapPage({}: MapViewProps) {
           <MapContainer
             center={[parseFloat(latInput), parseFloat(lngInput)]}
             zoom={13}
-            className="h-full w-full"
-            onClick={e => handleMapClick(e.latlng.lat, e.latlng.lng)}
+            className={`h-full w-full ${filterMode === 'polygon' ? 'cursor-crosshair' : ''}`}
             onDragEnd={handleMapDragEnd}
             onZoomEnd={handleMapDragEnd}
           >
@@ -482,11 +521,16 @@ export default function MapPage({}: MapViewProps) {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
+            {/* Hook components — useMap() only works inside MapContainer */}
+            <MapClickHandler />
+            <MapDragController />
+
             {/* Map ref getter component */}
             <MapRefGetter mapRef={mapRef} />
 
             {/* Polygon overlays — rendered inside MapContainer for useMap() */}
             <MapLayers />
+
 
             {/* Region overlays */}
             {regions && regions.length > 0 && regions.map(region => {
