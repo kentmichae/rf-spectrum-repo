@@ -1,6 +1,6 @@
 """Ingestion router - bulk import from JSON/CSV."""
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from typing import List, Any
 
@@ -70,12 +70,11 @@ def upload_observations(
     db.commit()
 
     # Track this upload for the history panel
-    db.flush()  # get the first obs id
-    # Pick a representative observation from this upload for history display
+    now_utc = datetime.now(timezone.utc)
     first_obs = None
     for obs in db.query(Observation).filter(
-        Observation.created_at == func.now().timezone('UTC').replace(microsecond=0)
-    ).limit(1).all():
+        Observation.created_at >= now_utc - timedelta(seconds=5)
+    ).order_by(Observation.created_at.desc()).limit(1).all():
         first_obs = obs
         break
 
@@ -285,12 +284,40 @@ def ingest_json(
 
     db.commit()
 
+    now_utc = datetime.now(timezone.utc)
+    first_obs = None
+    for obs in db.query(Observation).filter(
+        Observation.created_at >= now_utc - timedelta(seconds=5)
+    ).order_by(Observation.created_at.desc()).limit(1).all():
+        first_obs = obs
+        break
+
+    # Track upload for history panel
+    upload_record = IngestionUpload(
+        source_name="api_json",
+        total_records=len(payload.data),
+        processed_records=processed,
+        errors=errors if errors else None,
+        classification=first_obs.classification_status if first_obs else None,
+        frequency_start=first_obs.frequency_start if first_obs else None,
+        frequency_end=first_obs.frequency_end if first_obs else None,
+        modulation_type=first_obs.modulation_type if first_obs else None,
+        signal_strength=first_obs.signal_strength if first_obs else None,
+    )
+    db.add(upload_record)
+    db.commit()
+
     return {
-        "job_id": job_id,
-        "status": "completed",
-        "total_records": len(payload.data),
-        "processed": processed,
-        "errors": errors,
+        "id": upload_record.id,
+        "source_name": upload_record.source_name,
+        "total_records": upload_record.total_records,
+        "processed_records": upload_record.processed_records,
+        "classification": upload_record.classification,
+        "frequency_start": upload_record.frequency_start,
+        "frequency_end": upload_record.frequency_end,
+        "modulation": upload_record.modulation_type,
+        "signal_strength": upload_record.signal_strength,
+        "recorded_at": upload_record.recorded_at.isoformat() if upload_record.recorded_at else None,
     }
 
 
