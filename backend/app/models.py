@@ -108,3 +108,22 @@ class AuditTrail(Base):
 
     def __repr__(self):
         return f"<Audit(id={self.id}, obs={self.observation_id}, ts={self.change_timestamp})>"
+
+
+class IngestionUpload(Base):
+    __tablename__ = "ingestion_uploads"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source_name: Mapped[str] = mapped_column(Text, nullable=False, default="unknown")
+    total_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_records: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    errors: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True)
+    classification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    frequency_start: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    frequency_end: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    modulation_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signal_strength: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<IngestionUpload(id={self.id}, source={self.source_name}, ts={self.recorded_at})>"

@@ -10,8 +10,8 @@ from geoalchemy2 import WKTElement
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas import ObservationCreate
-from ..models import Observation
+from ..schemas import ObservationCreate, IngestionUploadRead
+from ..models import Observation, IngestionUpload
 from ..routes.auth import get_current_user_from_request
 
 router = APIRouter()
@@ -68,12 +68,50 @@ def upload_observations(
 
     db.commit()
 
+    # Track this upload for the history panel
+    db.flush()  # get the first obs id
+    # Pick a representative observation from this upload for history display
+    first_obs = None
+    for obs in db.query(Observation).filter(
+        Observation.created_at == db.func.now().timezone('UTC').replace(microsecond=0)
+    ).limit(1).all():
+        first_obs = obs
+        break
+
+    upload_record = IngestionUpload(
+        source_name=source_name,
+        total_records=len(records),
+        processed_records=processed,
+        errors=errors if errors else None,
+        classification=first_obs.classification_status if first_obs else None,
+        frequency_start=first_obs.frequency_start if first_obs else None,
+        frequency_end=first_obs.frequency_end if first_obs else None,
+        modulation_type=first_obs.modulation_type if first_obs else None,
+        signal_strength=first_obs.signal_strength if first_obs else None,
+    )
+    db.add(upload_record)
+    db.commit()
+
+    upload_resp = {
+        "id": upload_record.id,
+        "source_name": upload_record.source_name,
+        "total_records": upload_record.total_records,
+        "processed_records": upload_record.processed_records,
+        "classification": upload_record.classification,
+        "frequency_start": upload_record.frequency_start,
+        "frequency_end": upload_record.frequency_end,
+        "modulation_type": upload_record.modulation_type,
+        "signal_strength": upload_record.signal_strength,
+        "recorded_at": upload_record.recorded_at,
+    }
+
     return {
         "job_id": job_id,
         "status": "completed",
         "total_records": len(records),
         "processed": processed,
         "errors": errors,
+        "upload": upload_resp,
     }
 
 
@@ -263,3 +301,18 @@ def ingest_csv(
 ) -> dict:
     """Bulk ingest observations treating the JSON array like CSV rows."""
     return ingest_json(payload, db)
+
+
+@router.get("/history", tags=["ingestion"], response_model=List[IngestionUploadRead])
+def get_upload_history(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Return recent upload history for the frontend Upload History panel."""
+    uploads = (
+        db.query(IngestionUpload)
+        .order_by(IngestionUpload.recorded_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return uploads

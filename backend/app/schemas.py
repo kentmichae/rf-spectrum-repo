@@ -219,3 +219,28 @@ class IngestionJob(BaseModel):
     total_records: int = 0
     processed_records: int = 0
     errors: list[str] = Field(default_factory=list)
+
+
+class IngestionUploadRead(BaseModel):
+    id: int
+    source_name: str
+    total_records: int
+    processed_records: int
+    classification: Optional[str]
+    frequency_start: Optional[float]
+    frequency_end: Optional[float]
+    modulation_type: Optional[str]
+    signal_strength: Optional[float]
+    recorded_at: Optional[datetime]
+
+    @property
+    def timestamp(self) -> Optional[str]:
+        return self.recorded_at.isoformat() if self.recorded_at else None
+
+    @property
+    def classification_status(self) -> Optional[str]:
+        return self.classification
+
+    @property
+    def imported(self) -> bool:
+        return self.processed_records > 0
