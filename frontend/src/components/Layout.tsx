@@ -73,7 +73,7 @@ export default function Layout() {
             </div>
             <h1 className="text-2xl font-bold text-white">RF-SOR</h1>
             <p className="text-white/80 mt-2">RF Spectrum Observation Repository</p>
-            <p className="text-white/60 text-sm mt-1">v0.3.0</p>
+            <p className="text-white/60 text-sm mt-1">v0.4.0</p>
           </div>
           <div className="p-8">
             <div className="mb-6">
@@ -151,7 +151,7 @@ export default function Layout() {
               {sidebarOpen && (
                 <div>
                   <h1 className="text-xl font-bold text-cyan-400">RF-SOR</h1>
-                  <p className="text-xs text-slate-500">v0.3.0</p>
+                  <p className="text-xs text-slate-500">v0.4.0</p>
                 </div>
               )}
               <button

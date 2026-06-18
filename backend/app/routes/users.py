@@ -6,6 +6,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from sqlalchemy.exc import IntegrityError
 from ..database import get_db
 from ..schemas import (
     UserCreate, UserRead, UserUpdate,
@@ -23,7 +24,7 @@ router = APIRouter()
 
 @router.get("", tags=["users"])
 def list_users(
-    page_size: int = 20,
+    page_size: int = 100,
     page: int = 1,
     db: Session = Depends(get_db),
 ) -> List[UserRead]:
@@ -83,6 +84,15 @@ def create_user(
             detail="Cannot self-assign privileged role. Default role is VIEWER.",
         )
 
+    # Pre-check for duplicate username/email
+    existing_user = db.query(UserModel).filter(UserModel.username == payload.username).first()
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Username already registered")
+
+    existing_email = db.query(UserModel).filter(UserModel.email == payload.email).first()
+    if existing_email:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
     user = UserModel(
         username=payload.username,
         email=payload.email,
@@ -91,9 +101,13 @@ def create_user(
         region_id=payload.region_id,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user  # type: ignore[return-value]
+    try:
+        db.commit()
+        db.refresh(user)
+        return user  # type: ignore[return-value]
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Username already registered")
 
 
 @router.put("/{user_id}", tags=["users"])
