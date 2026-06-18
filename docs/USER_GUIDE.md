@@ -1,16 +1,24 @@
 # RF Spectrum Observation Repository (RF-SOR) - User Guide
 
+**Version:** 0.4.1
+**Last Updated:** 2026-06-17
+
+---
+
 ## Overview
 
 RF-SOR is a web-based Radio Frequency Spectrum Observation Repository that enables operators to:
+
 - Record and manage RF spectrum observations (frequency ranges, bandwidth, modulation types, signal strength)
 - Visualize observations geographically on an interactive map
 - Import/monitor RF data from various sources
 - Synchronize spectrum data across distributed nodes
 - Manage user access and authentication (JWT/Keycloak)
 - Configure system parameters and operational profiles
+- Track ingestion upload history
 
 **Application Stack:**
+
 - Frontend: React 18 + TypeScript + Tailwind CSS + React Router v6 + Leaflet maps
 - Backend: Python/FastAPI (port 8000)
 - Database: PostgreSQL with PostGIS (port 5432)
@@ -18,33 +26,40 @@ RF-SOR is a web-based Radio Frequency Spectrum Observation Repository that enabl
 - Authentication: JWT + optional Keycloak OIDC
 
 **Access Points:**
+
 - Login: `http://localhost:8082` or `http://localhost:8082/`
 - Frontend Dev: `http://localhost:3001`
 - Backend API: `http://localhost:8000`
+
+---
 
 ## Authentication
 
 ### Logging In
 
 1. Navigate to `http://localhost:8082` in your browser
-2. You will see the RF-SOR login screen with the application logo and branding
-3. Enter your credentials:
+2. Enter your credentials:
    - **Username:** Your assigned username (e.g., `admin`, `operator`, `viewer`)
    - **Password:** Your assigned password
-4. Click the **"Sign In"** button
-5. Upon successful authentication, you are redirected to the Dashboard
-
-![RF-SOR Login Screen](screenshots/login-screen.png)
+3. Click the **"Sign In"** button
+4. Upon successful authentication, you are redirected to the Dashboard
 
 ### Role-Based Access
 
 | Role | Dashboard | Observations | Map View | Import | Users | Sync | Settings |
-|------|-----------|--------------|----------|--------|-------|------|----------|
+|------|-----------|--------------|----------|--------|-------|------|------|
 | VIEWER | Yes | Yes | Yes | No | No | No | No |
 | OPERATOR | Yes | Yes | Yes | Yes | No | Yes | No |
 | ADMIN | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
 The sidebar navigation dynamically shows/hides menu items based on your assigned role.
+
+### Security Notes
+
+- **Minimum password length:** 16 characters (enforced at server)
+- **JWT secret key:** Minimum 32 characters (enforced at server)
+- **Session timeout:** Tokens expire and require re-authentication
+- **Brute-force protection:** Login attempts are rate-limited
 
 ---
 
@@ -54,8 +69,8 @@ The sidebar navigation dynamically shows/hides menu items based on your assigned
 
 The application uses a vertical sidebar layout on the left side:
 
-- **Brand Area:** RF-SOR logo and version number (v0.4.0)
-- **Collapse/Expand Button:** Click the left-facing triangle to collapse the sidebar to icon-only mode
+- **Brand Area:** RF-SOR logo and version number (v0.4.1)
+- **Collapse/Expand Button:** Click the left-facing triangle to collapse the sidebar
 - **Navigation Items:** Dynamic based on user role (see role matrix above)
 - **User Info:** Current user's username and role shown with avatar
 - **Logout Button:** Click to logout and return to the login screen
@@ -63,11 +78,12 @@ The application uses a vertical sidebar layout on the left side:
 #### Sidebar Items
 
 | Menu Item | Description |
-|-----------|-------------|
+|-----------|--------------------------|
 | Dashboard | Overview statistics and recent activity |
 | Observations | Full CRUD management of RF spectrum observations |
 | Map View | Interactive Leaflet map with observation markers |
 | Import | Import RF data from external formats/sources |
+| Ingestion History | Track all data upload operations |
 | Users | User management (ADMIN only) |
 | Sync | Data synchronization controls (ADMIN/OPERATOR) |
 | Settings | System configuration (ADMIN only) |
@@ -75,6 +91,7 @@ The application uses a vertical sidebar layout on the left side:
 ### Top Bar
 
 The top bar displays:
+
 - **Application Title:** "RF Spectrum Observation Repository"
 - **Authentication Status Badge:** Green "Authenticated" or red "Guest"
 - **User Email:** Displayed on the right side of the bar
@@ -90,11 +107,12 @@ The dashboard provides a real-time summary of the RF spectrum system:
 - **Total Observations:** Count of all recorded RF observations
 - **Active Users:** Number of currently authenticated users
 - **Regions Count:** Number of defined geographic regions
-- **System Status:** Current health status (Green/Red/Yellow indicators for different components)
+- **System Status:** Current health status (Green/Red/Yellow indicators)
 
 ### Recent Activity
 
 Displays recent system activity including:
+
 - New observation records
 - User login/logout events
 - Import operations
@@ -108,11 +126,12 @@ The dashboard auto-refreshes to show the latest status.
 
 ### Overview
 
-This is the primary data management interface for RF spectrum observations. It provides full CRUD (Create, Read, Update, Delete) operations.
+This is the primary data management interface for RF spectrum observations. It provides full CRUD operations.
 
 ### Observation Fields
 
 Each observation record contains:
+
 - **ID:** Unique identifier (auto-generated UUID)
 - **Frequency Start (MHz):** Lower bound of frequency range
 - **Frequency End (MHz):** Upper bound of frequency range
@@ -132,7 +151,7 @@ Each observation record contains:
 2. The main table displays all observations with:
    - **ID column:** Click to view observation details
    - **Frequency Range:** `freq_start` to `freq_end` in MHz
-   - **Signal Strength:** Color-coded (green = strong red = weak)
+   - **Signal Strength:** Color-coded (green = strong, red = weak)
    - **Classification Status:** Color-coded with label
    - **Timestamp:** Time of observation in ISO format
    - **Actions:** Edit and Delete buttons per row
@@ -168,7 +187,7 @@ Each observation record contains:
 
 1. Click the **delete icon** (trash can) in the Actions column
 2. Confirm the deletion in the browser prompt
-3. The observation is permanently removed from the database
+3. The observation is logically removed (is_current set to false)
 
 ### Filtering and Searching
 
@@ -181,6 +200,35 @@ Each observation record contains:
 
 ---
 
+## Ingestion History
+
+### Overview
+
+Track all data ingestion and upload operations performed on the system. This provides audit trail visibility for data import activities.
+
+### Viewing History
+
+1. Click **"Ingestion History"** in the sidebar
+2. View a table of all upload operations including:
+   - Upload ID and timestamp
+   - File name and format (CSV, JSON, etc.)
+   - Number of records processed
+   - Status (success/error)
+
+### Filtering
+
+- Filter by date range
+- Filter by status (success/error)
+- Filter by file format
+
+### Access
+
+- **ADMIN:** Full access to all ingestion records
+- **OPERATOR:** View upload history for their own operations
+- **VIEWER:** No access to ingestion history
+
+---
+
 ## Map View
 
 ### Overview
@@ -190,6 +238,7 @@ Interactive geographic map using Leaflet.js with OpenStreetMap tiles. Displays R
 ### Map Controls (Top-Right Corner)
 
 Three tabs for filtering modes:
+
 1. **All** - Shows all observations globally
 2. **Lat/Lng** - Filter by specific coordinates and radius
 3. **Polygon** - Click on map to draw a polygon for spatial filtering
@@ -197,6 +246,7 @@ Three tabs for filtering modes:
 ### Map Features
 
 #### Observations Markers
+
 - **Clickable Markers:** Click any marker to fly-map to that observation's location
 - **Color-coded Markers:**
   - GREEN: UNCLASSIFIED
@@ -225,8 +275,9 @@ Three tabs for filtering modes:
 - Click "Apply Polygon" to filter observations inside
 
 #### Map Interaction
+
 - **Pan:** Click and drag
-- **Zoom:** Mouse wheel or +/ buttons (top-right)
+- **Zoom:** Mouse wheel or +/- buttons (top-right)
 - **Click-to-Add:** In polygon mode, clicking the map adds points
 - **Clear Filter:** Click "Clear" to reset spatial filters
 
@@ -234,13 +285,29 @@ Three tabs for filtering modes:
 
 ## Import
 
-Data import interface for bringing in external RF spectrum data from various sources:
+### Data Import Interface
+
+Interface for bringing in external RF spectrum data from various sources:
+
 - File uploads (CSV, JSON, custom formats)
 - API-based ingestion
 - Real-time stream monitoring
 - Coordinate system conversion
+- Automatic ingestion history tracking
 
-<[Import Screen](screenshots/import-screen.png)
+### Import Limits
+
+- **Maximum file size:** Configured system limit
+- **Supported formats:** CSV, JSON, custom parsers
+- **Rate limiting:** Ingestion attempts are rate-limited to prevent abuse
+
+### Import Process
+
+1. Navigate to **Import** in the sidebar
+2. Select file or enter data
+3. Preview parsed data (validation preview)
+4. Confirm and submit
+5. Track status in **Ingestion History**
 
 ---
 
@@ -251,15 +318,23 @@ Data import interface for bringing in external RF spectrum data from various sou
 Administrative interface for system users. Only accessible to ADMIN role users.
 
 ### User Management Features
+
 - **Create New User:** Assign usernames, roles, and temporary passwords
 - **Edit User:** Modify roles, permissions, or passwords
 - **List Users:** View all system users with their current roles
 - **Delete User:** Remove access to the system
 
 ### User Roles
+
 - **VIEWER:** Read-only access (Dashboard, Observations, Map View)
 - **OPERATOR:** Read/write operations (adds Import and Sync access)
 - **ADMIN:** Full administrative access (all modules)
+
+### Security Notes
+
+- Cannot self-assign ADMIN or LEAD roles — must be granted by an existing admin
+- All passwords are hashed with bcrypt (with truncation for compatibility)
+- Duplicate usernames/emails are prevented
 
 ### Role Matrix
 
@@ -282,6 +357,7 @@ Administrative interface for system users. Only accessible to ADMIN role users.
 Controls for synchronizing RF spectrum data between distributed nodes or clusters. Only accessible to OPERATOR and ADMIN roles.
 
 ### Sync Operations
+
 - **Push:** Send local observations to remote nodes
 - **Pull:** Fetch latest data from remote nodes
 - **Merge:** Resolve conflicts between data sources
@@ -296,6 +372,7 @@ Controls for synchronizing RF spectrum data between distributed nodes or cluster
 Administrative configuration interface for RF-SOR system settings.
 
 ### Configuration Areas
+
 - **Database Settings:** Connection parameters and pool configuration
 - **Authentication:** JWT/keycloak OIDC configuration
 - **System Parameters:** Operational thresholds, refresh intervals, limits
@@ -308,16 +385,19 @@ Administrative configuration interface for RF-SOR system settings.
 ## Application Layout
 
 ### Sidebar Collapse/Expand
+
 - Click the toggle button (◀/▶) in the top-left corner of the sidebar
-- Collapsed mode shows only icons (Dashboard, Observations, etc.)
+- Collapsed mode shows only icons
 - Expanded mode shows icons + labels for easier navigation
 
 ### User Avatar
+
 - **Color:** Cyan background (rgb(6, 182, 212))
 - **Icon:** User silhouette symbol
 - **Badge:** Role label displayed below username
 
 ### Status Indicators
+
 - **Green:** All systems operational
 - **Red:** Error or unhealthy system
 - **Yellow:** Warning or degraded performance
@@ -343,6 +423,7 @@ Administrative configuration interface for RF-SOR system settings.
    - Verify file format matches backend expectations
    - Check file size against configured limits
    - Ensure backend has write permissions to temp directories
+   - Check Ingestion History for error details
 
 4. **Sync Errors**
    - Verify network connectivity to remote nodes
@@ -365,22 +446,44 @@ For technical support:
 | Method | Path | Description | Role |
 |--------|------|-------------|------|
 | POST | /api/auth/login | JWT login | Any |
+| POST | /api/auth/register | Register new user | Any (VIEWER only) |
+| GET | /api/auth/me | Get current user | Authenticated |
 | GET | /api/observations/ | List observations (paginated) | VIEWER+ |
 | POST | /api/observations/ | Create observation | ADMIN/OPERATOR |
+| POST | /api/observations/bulk | Bulk create observations | ADMIN/OPERATOR |
 | GET | /api/observations/{id} | Get observation detail | Any |
 | PUT | /api/observations/{id} | Update observation | ADMIN/OPERATOR |
 | DELETE | /api/observations/{id} | Delete observation | ADMIN/OPERATOR |
+| GET | /api/observations/by_region | Get by region | VIEWER+ |
+| GET | /api/observations/by_distance | Get by distance | VIEWER+ |
+| GET | /api/observations/by_bbox | Get by bounding box | VIEWER+ |
+| GET | /api/equipment/ | List equipment | VIEWER+ |
+| POST | /api/equipment/ | Create equipment | ADMIN |
+| PUT | /api/equipment/{id} | Update equipment | ADMIN |
+| DELETE | /api/equipment/{id} | Delete equipment | ADMIN |
 | GET | /api/users/ | List users | ADMIN |
+| POST | /api/users/ | Create user | ADMIN |
 | PUT | /api/users/{id} | Update user | ADMIN |
-| GET | /api/regions/ | List geographic regions | Any |
-| POST | /api/regions/ | Create region | ADMIN/OPERATOR |
+| DELETE | /api/users/{id} | Delete user | ADMIN |
+| GET | /api/spatial/regions | List geographic regions | VIEWER+ |
+| POST | /api/spatial/regions | Create region | ADMIN/OPERATOR |
+| GET | /api/spatial/regions/{id} | Get region detail | Any |
+| POST | /api/ingestion/csv | Upload CSV data | ADMIN/OPERATOR |
+| POST | /api/ingestion/json | Upload JSON data | ADMIN/OPERATOR |
+| GET | /api/ingestion/history | View ingestion history | VIEWER+ |
+| GET | /api/sync/ | Get sync status | Authenticated |
+| POST | /api/sync/ | Process sync deltas | Authenticated |
+| POST | /api/sync/trigger | Trigger full sync | ADMIN/OPERATOR |
 | GET | /api/health | System health check | Any |
 
 ### Database Schema (PostgreSQL 16 + PostGIS 3.4)
 
 **Observations Table:**
+
 ```
 id UUID (PK, default: gen_random_uuid())
+observation_uuid UUID (unique)
+version INTEGER (default: 1)
 timestamp TIMESTAMPTZ (default: now())
 frequency_start float (default: 0.0)
 frequency_end float (default: 999.0)
@@ -389,32 +492,101 @@ location geometry(Point, 4326)
 classification_status varchar
 modulation_type varchar
 signal_strength float
-equipment_id FK(users)
+equipment_id FK(equipment)
 technician_id FK(users)
 notes text
+is_current boolean (default: true)
+created_at TIMESTAMPTZ (default: now())
 ```
 
 **Users Table:**
+
 ```
 id UUID (PK, default: gen_random_uuid())
 username varchar(255) (unique, not null)
 email varchar(255) (unique, not null, lower)
-role varchar(20) (default: VIEWER)
 password_hash varchar(255)
+role varchar(20) (default: VIEWER)
+region_id FK(regions)
 is_active boolean (default: true)
 created_at TIMESTAMPTZ (default: now())
 updated_at TIMESTAMPTZ (default: now())
 ```
 
+**Equipment Table:**
+
+```
+id UUID (PK, default: gen_random_uuid())
+model varchar(255)
+serial_number varchar(255) (unique)
+firmware_version varchar(100)
+status varchar(50) (default: 'ACTIVE')
+created_at TIMESTAMPTZ (default: now())
+```
+
 **Regions Table:**
+
 ```
 id UUID (PK, default: gen_random_uuid())
 name varchar(255) (not null)
 description varchar(1000)
-geometry_wkt varchar(5000)
-area_geometry geometry(Polygon, 4326)
+boundary geometry(Polygon, 4326)
 status varchar(50) (default: 'ACTIVE')
 created_at TIMESTAMPTZ (default: now())
 updated_at TIMESTAMPTZ (default: now())
 ```
 
+**IngestionUpload Table:**
+
+```
+id UUID (PK, default: gen_random_uuid())
+file_name varchar(500)
+file_format varchar(20) (CSV, JSON)
+records_count integer
+uploaded_by FK(users)
+created_at TIMESTAMPTZ (default: now())
+```
+
+---
+
+## Version History
+
+### v0.4.1 (2026-06-17)
+
+**Security Hardening:**
+- ✅ Removed all default database credentials
+- ✅ Enforced minimum credential lengths (16 char passwords, 32 char JWT secrets)
+- ✅ Blocked self-assignment of ADMIN/LEAD roles during registration
+- ✅ Added JWT audience/issuer validation
+- ✅ Added brute-force protection via login rate limiting
+- ✅ Added bcrypt password truncation fix (72-byte compat with LibreSSL)
+
+**Features:**
+- ✅ New `/api/ingestion/history` endpoint for tracking upload operations
+- ✅ IngestionUpload model with audit trail
+- ✅ CSV and JSON upload endpoints with format validation
+- ✅ JSONC comment support (leading `#` lines handled)
+
+**Bug Fixes:**
+- ✅ Polygon marker rendering fix with correct layer hierarchy
+- ✅ Timestamp fixes (use `datetime.now(timezone.utc)` everywhere)
+- ✅ Ingestion timestamp validation
+- ✅ Technician name resolution cleanup
+
+**Cleanup:**
+- ✅ Removed dead code (cors_config.py, api.ts)
+- ✅ Added technician_name to observation read schema
+- ✅ Unified nginx configuration
+
+### v0.4.0 (2026-06-13)
+
+- Initial release with JSONC comment support
+- Invalid JSON handling (→ 400 error)
+- datetime.utcnow deprecation fix
+- User CRUD functionality
+- Polygon filter improvements
+- Bcrypt compatibility fix
+
+---
+
+*This guide covers RF-SOR version 0.4.1. For earlier versions, see the [CHANGELOG.md](CHANGELOG.md) file.*
