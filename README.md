@@ -8,7 +8,7 @@ The system provides a structured workflow for capturing RF signal fingerprints a
 ## ✨ Architecture & Design Goals
 This project is an architectural scaffold with the data models, API structure, and UI layout for a full RF signal observation system. The current deployment provides the foundation; the following sections describe what is implemented vs. intended.
 
-### Implemented Today (v0.4.1)
+### Implemented Today (v0.4.2)
 - **Container Stack:** Fully running Docker Compose with PostgreSQL 16/PostGIS, FastAPI backend, React frontend, and Nginx reverse proxy.
 - **Database Schema:** SQLAlchemy models for `Region`, `User`, `Equipment`, `Observation`, and `AuditTrail` with PostGIS geometry support.
 - **Authentication & RBAC:** Auth context with Keycloak OIDC + local JWT, login modal, role-based menu access (VIEWER/OPERATOR/ADMIN), Settings configuration.

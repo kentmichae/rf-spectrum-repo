@@ -1,6 +1,6 @@
 # RF Spectrum Observation Repository (RF-SOR) - User Guide
 
-**Version:** 0.4.1
+**Version:** 0.4.2
 **Last Updated:** 2026-06-17
 
 ---
@@ -71,7 +71,7 @@ The sidebar navigation dynamically shows/hides menu items based on your assigned
 
 The application uses a vertical sidebar layout on the left side:
 
-- **Brand Area:** RF-SOR logo and version number (v0.4.1)
+- **Brand Area:** RF-SOR logo and version number (v0.4.2)
 - **Collapse/Expand Button:** Click the left-facing triangle to collapse the sidebar
 - **Navigation Items:** Dynamic based on user role (see role matrix above)
 - **User Info:** Current user's username and role shown with avatar
