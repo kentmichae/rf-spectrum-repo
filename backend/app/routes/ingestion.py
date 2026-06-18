@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from geoalchemy2 import WKTElement
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from ..database import get_db
 from ..schemas import ObservationCreate, IngestionUploadRead
@@ -73,7 +74,7 @@ def upload_observations(
     # Pick a representative observation from this upload for history display
     first_obs = None
     for obs in db.query(Observation).filter(
-        Observation.created_at == db.func.now().timezone('UTC').replace(microsecond=0)
+        Observation.created_at == func.now().timezone('UTC').replace(microsecond=0)
     ).limit(1).all():
         first_obs = obs
         break
