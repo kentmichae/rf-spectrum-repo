@@ -206,6 +206,16 @@ export const apiIngestion = {
       body: formData,
     });
   },
+
+  getHistory: (limit = 10): Promise<any[]> => {
+    const token = getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetchApi<any[]>('/ingestion/history', {
+      method: 'GET',
+      headers,
+    });
+  },
 };
 
 // --- Sync ---

@@ -126,6 +126,7 @@ class ObservationRead(BaseSchema):
     notes: Optional[str]
     equipment_id: Optional[UUID]
     technician_id: Optional[UUID]
+    technician_name: Optional[str]
     location_wkt: str
     is_current: bool
     created_at: datetime

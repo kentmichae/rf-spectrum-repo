@@ -1,3 +1,6 @@
+# force-rebuild-rotatecw-fix
+# patched Tue Jun 16 16:03:26 2026
+# rebuilt at Tue Jun 16 15:55:54 2026
 FROM node:20-alpine AS build
 
 WORKDIR /app
@@ -26,3 +29,7 @@ RUN npm install -g serve
 EXPOSE 3000
 
 CMD ["serve", "-s", "dist", "-l", "3000"]
+
+# rebuilt-1781643913
+
+# fix-1781644040

@@ -1,0 +1,20 @@
+# ARM64-native PostGIS image (replaces postgis/postgis:16-3.4)
+# The official postgis/postgis Docker images are AMD64-only with no ARM64 manifest.
+# This image uses postgres:16-debian + PGDG Apt repo to get native ARM64 PostGIS 3 packages.
+FROM postgres:16-bookworm
+
+# Install PostGIS 3.6.3 (arm64 available via PGDG Debian repos)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates wget gnupg && \
+    install -d /usr/share/keyrings && \
+    wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    postgresql-16-postgis-3 \
+    postgresql-16-postgis-3-scripts && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+EXPOSE 5432

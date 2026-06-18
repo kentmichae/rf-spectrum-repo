@@ -26,7 +26,14 @@ def _obs_to_dict(obs: Observation) -> dict:
             loc_wkt = shapely.wkt.dumps(geom)
         except Exception:
             loc_wkt = str(obs.location)
-    
+
+    # Get technician name
+    technician_name = None
+    if obs.technician_id:
+        tech = getattr(obs, '_technician_username', None) or getattr(getattr(obs, 'technician', None), 'username', None)
+        if tech:
+            technician_name = tech
+
     return {
         "id": obs.id,
         "observation_uuid": obs.observation_uuid,
@@ -41,6 +48,7 @@ def _obs_to_dict(obs: Observation) -> dict:
         "notes": obs.notes,
         "equipment_id": obs.equipment_id,
         "technician_id": obs.technician_id,
+        "technician_name": technician_name,
         "location_wkt": loc_wkt,
         "is_current": obs.is_current,
         "created_at": obs.created_at,
@@ -98,7 +106,7 @@ def list_observations(
     return [_obs_to_dict(o) for o in results]  # type: ignore[return-value]
 
 
-@router.post("", response_model=ObservationRead, tags=["observations"])
+@router.post("", status_code=201, response_model=ObservationRead, tags=["observations"])
 def create_observation(
     payload: ObservationCreate,
     db: Session = Depends(get_db),

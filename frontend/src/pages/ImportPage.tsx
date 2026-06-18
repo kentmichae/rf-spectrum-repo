@@ -1,8 +1,8 @@
 /**
  * Import Page - Bulk data upload with CSV/JSON parsing and API submission.
  */
-import { useState, useCallback } from 'react';
-import { Upload, FileText, AlertCircle, CheckCircle, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Upload, FileText, AlertCircle, CheckCircle, ChevronDown, ChevronUp, X, Clock } from 'lucide-react';
 import { apiIngestion } from '../lib/api-client';
 import type { IngestionResult } from '../types/api';
 
@@ -47,6 +47,9 @@ export default function ImportPage() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((f: File) => {
     setFile(f);
@@ -98,6 +101,18 @@ export default function ImportPage() {
     reader.readAsText(f);
   }, [file]);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await apiIngestion.getHistory();
+      setHistory(data || []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     if (!file) return;
     setImportState({ status: 'uploading', result: null, errors: [] });
@@ -108,12 +123,13 @@ export default function ImportPage() {
         : await apiIngestion.postCsv(file);
       setImportState({ status: 'success', result, errors: result.errors });
       setShowErrors(result.errors.length > 0);
+      loadHistory();
     } catch (err: any) {
       setImportState({ status: 'error', result: null, errors: [{ row: 0, field: 'upload', error: err.message || 'Upload failed' }] });
     } finally {
       setLoading(false);
     }
-  }, [file]);
+  }, [file, loadHistory]);
 
   const reset = () => {
     setFile(null);
@@ -124,6 +140,14 @@ export default function ImportPage() {
     setImportState({ status: 'idle', result: null, errors: [] });
     setShowErrors(false);
   };
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const handleAreaClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, [fileInputRef]);
 
   return (
     <div className="space-y-6">
@@ -144,9 +168,10 @@ export default function ImportPage() {
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
           dragActive ? 'border-cyan-500 bg-cyan-50/10' : file ? 'border-cyan-500/50 bg-cyan-50/5' : 'border-slate-700 bg-slate-900'
         }`}
+        onClick={handleAreaClick}
         onDragOver={e => { e.preventDefault(); setDragActive(true); }}
         onDragLeave={() => setDragActive(false)}
-        onDrop={e => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }}
+        onDrop={e => { e.preventDefault(), setDragActive(false), e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]) }}
       >
         <Upload className={`w-12 h-12 mx-auto mb-4 ${dragActive ? 'text-cyan-400' : 'text-slate-500'}`} />
         {file ? (
@@ -199,6 +224,7 @@ export default function ImportPage() {
             <h3 className="text-lg font-semibold text-white mb-2">Drop files here or click to upload</h3>
             <p className="text-slate-500 mb-4">Supports CSV and JSON files</p>
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv,.json,application/json"
               className="hidden"
@@ -221,10 +247,14 @@ export default function ImportPage() {
                 <CheckCircle className="w-6 h-6 text-emerald-400" />
                 <div>
                   <h3 className="text-lg font-semibold text-emerald-400">Import Successful</h3>
-                  <p className="text-sm text-slate-400">{importState.result.created} created, {importState.result.updated} updated, {importState.result.total} total</p>
+                  {importState.result.created !== undefined && importState.result.updated !== undefined ? (
+                    <p className="text-sm text-slate-400">{importState.result.created} created, {importState.result.updated} updated, {importState.result.total} total</p>
+                  ) : (
+                    <p className="text-sm text-slate-400">Import complete</p>
+                  )}
                 </div>
               </div>
-              {importState.result.errors.length > 0 && (
+              {importState.result.errors && importState.result.errors.length > 0 && (
                 <div className="border-t border-emerald-500/30 pt-4">
                   <button onClick={() => setShowErrors(!showErrors)} className="flex items-center gap-2 text-sm text-orange-400 hover:text-orange-300">
                     {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -236,7 +266,7 @@ export default function ImportPage() {
                         <div key={idx} className="flex items-start gap-2 text-sm text-orange-300 bg-orange-500/10 rounded p-3 border border-orange-500/20">
                           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                           <div>
-                            <span className="font-mono">Row {err.row + 1}, field "{err.field}":</span> {err.error}
+                            <span className="font-mono">Row {err.row + 1}, field &quot;{err.field}&quot;:</span> {err.error}
                           </div>
                         </div>
                       ))}
@@ -244,6 +274,17 @@ export default function ImportPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {importState.status === 'error' && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-red-400" />
+                <div>
+                  <h3 className="text-lg font-semibold text-red-400">Import Failed</h3>
+                  <p className="text-sm text-slate-400">{importState.errors[0]?.error || 'Upload failed'}</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -254,7 +295,32 @@ export default function ImportPage() {
           <FileText className="w-6 h-6 text-slate-500" />
           <h2 className="text-lg font-semibold text-white">Upload History</h2>
         </div>
-        <p className="text-slate-500">No previous uploads in this session.</p>
+        {historyLoading ? (
+          <div className="text-slate-500 text-sm flex items-center gap-2">
+            <Clock className="w-4 h-4 inline animate-spin" />
+            Loading...
+          </div>
+        ) : history.length === 0 ? (
+          <p className="text-slate-500 text-sm">No previous uploads.</p>
+        ) : (
+          <div className="space-y-3">
+            {history.map((entry, idx) => (
+              <div key={entry.id || idx} className="flex items-center gap-3 bg-slate-800/50 rounded-lg p-3 border border-slate-800">
+                <Clock className="w-4 h-4 text-cyan-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white">
+                    {entry.frequency_start?.toFixed(1) ?? '?'}–{entry.frequency_end?.toFixed(1) ?? '?'} MHz
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {entry.modulation_type || 'No modulation'} · {entry.classification_status || 'Uncertain'}
+                    {entry.timestamp ? ` · ${new Date(entry.timestamp).toLocaleString()}` : ''}
+                  </div>
+                </div>
+                <span className="text-xs text-cyan-400 font-medium flex-shrink-0">{entry.imported && 'Imported'}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

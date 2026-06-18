@@ -3,6 +3,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -79,7 +80,7 @@ def update_equipment(
     return equip  # type: ignore[return-value]
 
 
-@router.delete("/{equip_id}", tags=["equipment"])
+@router.delete("/{equip_id}", status_code=204, tags=["equipment"])
 def delete_equipment(
     equip_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -90,4 +91,3 @@ def delete_equipment(
         raise HTTPException(status_code=404, detail="Equipment not found")
     db.delete(equip)
     db.commit()
-    return {"status": "deleted", "id": str(equip_id)}
