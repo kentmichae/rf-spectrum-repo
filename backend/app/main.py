@@ -1,4 +1,4 @@
-"""RF-SOR API (v0.4.0)"""
+"""RF-SOR API (v0.4.1)"""
 
 import logging
 from contextlib import asynccontextmanager
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RF Spectrum Observation Repository (RF-SOR) API",
-    version="0.4.0",
+    version="0.4.1",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -66,7 +66,7 @@ async def global_exception_handler(request, exc):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": "0.4.0"}
+    return {"status": "healthy", "version": "0.4.1"}
 
 
 # ====== TODO: Wire routers ===
